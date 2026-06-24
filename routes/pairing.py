@@ -1,6 +1,7 @@
 """Pairing API routes — same engine facade powers REST + MCP. Backend (Supabase or
 local) is chosen in engines/pairing.py."""
 from fastapi import APIRouter, HTTPException, Query
+
 from pydantic import BaseModel
 
 from engines import pairing as engine
@@ -37,7 +38,7 @@ def pair(
     mode: str = Query("balanced", pattern="^(safe|balanced|experimental)$"),
     limit: int = Query(20, ge=1, le=100),
 ):
-    """Ranked, explained pairings for an ingredient."""
+    """Ranked, explained pairings for an ingredient (each carries a strength tier)."""
     try:
         results = engine.pair(ingredient, mode=mode, limit=limit)
     except KeyError as e:
@@ -45,6 +46,34 @@ def pair(
     except NotImplementedError as e:
         raise HTTPException(status_code=501, detail=str(e))
     return {"ingredient": ingredient, "mode": mode, "pairings": results}
+
+
+@router.get("/trio/{ingredient}")
+def trio(ingredient: str, limit: int = Query(8, ge=1, le=30)):
+    """Affinities-in-threes: anchor + two partners that all mutually pair."""
+    try:
+        results = engine.trio(ingredient, limit=limit)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    return {"ingredient": ingredient, "trios": results}
+
+
+@router.get("/bridge")
+def bridge(
+    a: str = Query(..., description="first ingredient"),
+    c: str = Query(..., description="second ingredient"),
+    limit: int = Query(8, ge=1, le=30),
+):
+    """Flavour-bridging: intermediate ingredient(s) linking two that don't directly pair."""
+    try:
+        results = engine.bridge(a, c, limit=limit)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    return {"a": a, "c": c, "bridges": results}
 
 
 @router.get("/substitute/{ingredient}")
