@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from settings import settings
 from routes import pairing
 
-app = FastAPI(title="IngredientAI API", version="0.3.0")
+app = FastAPI(title="IngredientAI API", version="0.3.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,7 +19,7 @@ app.include_router(pairing.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "environment": settings.environment, "version": "0.3.0"}
+    return {"status": "ok", "environment": settings.environment, "version": "0.3.1"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -70,7 +70,7 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
   <div id=graph></div>
   <div class=side>
     <div class=h>Focused</div>
-    <div id=focus class=muted>Click a node to see its flavour notes.</div>
+    <div id=focus class=muted>Click a node to expand it · double-click to add to recipe.</div>
     <div class=h>Flavour trios</div>
     <div id=trios class=muted>Affinities-in-threes appear here.</div>
     <div class=h>Bridge two ingredients</div>
@@ -85,9 +85,9 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
     <div id=recipe></div>
   </div>
 </div>
-<div class=hint>Pairings ranked by recipe co-occurrence + FlavorGraph2Vec + shared flavour notes. Tiers reflect affinity strength. Trios = affinities-in-threes; Bridge links ingredients that don't directly pair (recipe bridge, else shared aroma).</div>
+<div class=hint>Pairings ranked by recipe co-occurrence + FlavorGraph2Vec + shared flavour notes. Tiers reflect affinity strength. Click any node to grow the web from it. Trios = affinities-in-threes; Bridge links ingredients that don't directly pair.</div>
 <script>
-let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[];
+let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[], booted=false;
 const CAT={Fruit:'#e07a5f',Spice:'#d9883b',Dairy:'#4f9fd0','Plant/Vegetable':'#3a9d5d','Vegetable':'#3a9d5d','Meat':'#c1554f','Meat/Animal Product':'#c1554f',Seafood:'#3a8fc4','Nut/Seed':'#b07a3c','Beverage Alcoholic':'#9b6fc0','Beverage':'#7a9bd0',Flower:'#d07aa8',Fungus:'#8a7d6b','Condiment':'#a89a6a','Bakery/Dessert':'#caa06a','Bakery/Dessert/Snack':'#caa06a'};
 const TIER={classic:'#1d9e75',recommended:'#4f9fd0',interesting:'#9a958b',bold:'#d9883b'};
 const TW={classic:3,recommended:2.1,interesting:1.3,bold:1.7};
@@ -118,9 +118,10 @@ async function expand(key){
   let d; try{ d=await (await fetch(`/v1/pair/${encodeURIComponent(key)}?mode=${mode}&limit=8`)).json(); }catch(e){ return; }
   if(!d.pairings||!d.pairings.length) return;
   const pp=pos(key), n=d.pairings.length, R=175, base=(key.length%6);
+  let added=0;
   d.pairings.forEach((p,i)=>{
     const a=base+(i/n)*2*Math.PI;
-    addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*24-12), pp.y+R*Math.sin(a)+(Math.random()*24-12));
+    if(addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*24-12), pp.y+R*Math.sin(a)+(Math.random()*24-12))) added++;
     const eid=key+'|'+p.ingredient;
     const notes=(p.explanation.shared_notes||[]); const tier=p.tier||'';
     if(!edges.get(eid)&&!edges.get(p.ingredient+'|'+key))
@@ -128,7 +129,9 @@ async function expand(key){
         title:(tier?tier.toUpperCase()+' · ':'')+(notes.join(', ')||'similar profile'),
         width:TW[tier]||1.5, color:{color:(TIER[tier]||'#d8d3c8'),highlight:TIER[tier]||'#1d9e75'}});
   });
-  net.fit({animation:{duration:450}});
+  // Only frame the very first expansion. Afterwards the web grows in place so a
+  // click connects new pairings to the node you clicked without moving your view.
+  if(!booted){ booted=true; try{ net.fit({animation:{duration:450}}); }catch(e){} }
 }
 async function showFocus(key){
   const el=document.getElementById('focus');
@@ -177,7 +180,7 @@ async function build(){
     out.innerHTML=`<div class=rip><b>${r.suggestion}</b>${r.shared_theme&&r.shared_theme.length?`<div class=muted style="margin-top:6px">flavour bridge: ${r.shared_theme.slice(0,6).join(', ')}</div>`:''}</div>`;
   }catch(e){ out.innerHTML='<div class=muted>Could not build.</div>'; }
 }
-function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear();
+function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear(); booted=false;
   const k=document.getElementById('q').value.trim().toLowerCase().replace(/ /g,'_');
   addNodeAt(k,null,0,0); net.moveTo({position:{x:0,y:0},scale:0.9}); showFocus(k); expand(k);
 }
