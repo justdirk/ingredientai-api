@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from settings import settings
 from routes import pairing
 
-app = FastAPI(title="IngredientAI API", version="0.2.0")
+app = FastAPI(title="IngredientAI API", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,7 +19,7 @@ app.include_router(pairing.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "environment": settings.environment, "version": "0.2.0"}
+    return {"status": "ok", "environment": settings.environment, "version": "0.3.0"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -37,34 +37,46 @@ body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSys
 header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 h1{font-size:17px;font-weight:600;margin:0 14px 0 0}
 input,select{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:14px;background:#fff}
-input{min-width:180px}
+input{min-width:160px}
 .toggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .toggle button{border:0;background:#fff;padding:8px 12px;font-size:12.5px;cursor:pointer}.toggle button.on{background:var(--accent);color:#fff}
 button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer}
 .main{flex:1;display:flex;min-height:0}
 #graph{flex:1;min-width:0}
-.side{width:300px;border-left:1px solid var(--line);padding:14px;overflow:auto;background:#fff}
-.h{font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 7px}
+.side{width:312px;border-left:1px solid var(--line);padding:14px;overflow:auto;background:#fff}
+.h{font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 7px}
 .notes{font-size:13px}.notes b{color:var(--accent)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;background:#f3f6f4;cursor:pointer}
 .chip.add{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tchip{border:1px solid var(--line);border-radius:9px;padding:6px 9px;font-size:12.5px;background:#f7f6f2;cursor:pointer;margin-bottom:6px;display:block}
 .rip{font-size:13.5px;line-height:1.5;margin-top:8px;background:#f7f6f2;border:1px solid var(--line);border-radius:10px;padding:10px}
 .muted{color:var(--mut);font-size:12px}
 .hint{font-size:12px;color:var(--mut);padding:6px 16px;border-top:1px solid var(--line)}
+.badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:6px;color:#fff;vertical-align:middle}
+.b-classic{background:#1d9e75}.b-recommended{background:#4f9fd0}.b-interesting{background:#9a958b}.b-bold{background:#d9883b}
+.b-recipe{background:#1d9e75}.b-aroma{background:#9b6fc0}
+.legend{font-size:11px;color:var(--mut);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row{display:flex;gap:6px}.row input{min-width:0;flex:1}
 </style></head><body>
 <header>
   <h1>IngredientAI</h1>
   <input id=q placeholder="Start with an ingredient…" value="garlic" onkeydown="if(event.key==='Enter')start()">
   <button class=go onclick=start()>Explore</button>
   <div class=toggle><button data-m=safe onclick="setMode('safe')">Safe</button><button data-m=balanced class=on onclick="setMode('balanced')">Balanced</button><button data-m=experimental onclick="setMode('experimental')">Experimental</button></div>
-  <span class=muted>click a node to expand · double-click to add to your recipe</span>
+  <span class=legend><span class=badge style="background:#1d9e75">classic</span><span class=badge style="background:#4f9fd0">recommended</span><span class=badge style="background:#9a958b">interesting</span><span class=badge style="background:#d9883b">bold</span></span>
 </header>
 <div class=main>
   <div id=graph></div>
   <div class=side>
     <div class=h>Focused</div>
     <div id=focus class=muted>Click a node to see its flavour notes.</div>
+    <div class=h>Flavour trios</div>
+    <div id=trios class=muted>Affinities-in-threes appear here.</div>
+    <div class=h>Bridge two ingredients</div>
+    <div class=row><input id=ba placeholder="strawberry"><input id=bc placeholder="basil"></div>
+    <button class=go style="margin-top:6px" onclick=doBridge()>Find the bridge</button>
+    <div id=bridgeout></div>
     <div class=h>Your recipe</div>
     <div id=basket class=chips><span class=muted>double-click nodes to add</span></div>
     <div class=h>Make it a…</div>
@@ -73,10 +85,12 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
     <div id=recipe></div>
   </div>
 </div>
-<div class=hint>Graph: FlavorGraph2Vec similarity + shared flavour molecules. Notes from FlavorDB (non-commercial). Edges show the strongest shared note.</div>
+<div class=hint>Pairings ranked by recipe co-occurrence + FlavorGraph2Vec + shared flavour notes. Tiers reflect affinity strength. Trios = affinities-in-threes; Bridge links ingredients that don't directly pair (recipe bridge, else shared aroma).</div>
 <script>
 let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[];
-const CAT={Fruit:'#e07a5f',Spice:'#d9883b',Dairy:'#4f9fd0','Plant/Vegetable':'#3a9d5d','Meat/Animal Product':'#c1554f',Seafood:'#3a8fc4','Nut/Seed':'#b07a3c','Beverage Alcoholic':'#9b6fc0','Beverage':'#7a9bd0',Flower:'#d07aa8',Fungus:'#8a7d6b','Sauce/Powder/Dressing':'#a89a6a','Cereal/Crop/Bean':'#c0a050','Bakery/Dessert/Snack':'#caa06a'};
+const CAT={Fruit:'#e07a5f',Spice:'#d9883b',Dairy:'#4f9fd0','Plant/Vegetable':'#3a9d5d','Vegetable':'#3a9d5d','Meat':'#c1554f','Meat/Animal Product':'#c1554f',Seafood:'#3a8fc4','Nut/Seed':'#b07a3c','Beverage Alcoholic':'#9b6fc0','Beverage':'#7a9bd0',Flower:'#d07aa8',Fungus:'#8a7d6b','Condiment':'#a89a6a','Bakery/Dessert':'#caa06a','Bakery/Dessert/Snack':'#caa06a'};
+const TIER={classic:'#1d9e75',recommended:'#4f9fd0',interesting:'#9a958b',bold:'#d9883b'};
+const TW={classic:3,recommended:2.1,interesting:1.3,bold:1.7};
 const disp=s=>s.replace(/_/g,' ').replace(/\\b\\w/g,c=>c.toUpperCase());
 function color(cat){return CAT[cat]||'#8a9a8e'}
 function setMode(m){mode=m;document.querySelectorAll('.toggle button').forEach(b=>b.className=b.dataset.m===m?'on':'');}
@@ -108,9 +122,11 @@ async function expand(key){
     const a=base+(i/n)*2*Math.PI;
     addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*24-12), pp.y+R*Math.sin(a)+(Math.random()*24-12));
     const eid=key+'|'+p.ingredient;
-    const notes=(p.explanation.shared_notes||[]);
+    const notes=(p.explanation.shared_notes||[]); const tier=p.tier||'';
     if(!edges.get(eid)&&!edges.get(p.ingredient+'|'+key))
-      edges.add({id:eid,from:key,to:p.ingredient,label:notes[0]||'',title:notes.join(', ')||'similar profile'});
+      edges.add({id:eid,from:key,to:p.ingredient,label:notes[0]||'',
+        title:(tier?tier.toUpperCase()+' · ':'')+(notes.join(', ')||'similar profile'),
+        width:TW[tier]||1.5, color:{color:(TIER[tier]||'#d8d3c8'),highlight:TIER[tier]||'#1d9e75'}});
   });
   net.fit({animation:{duration:450}});
 }
@@ -119,8 +135,31 @@ async function showFocus(key){
   el.innerHTML=`<b style="font-size:15px">${disp(key)}</b> <button class=go style="padding:3px 8px;font-size:11px" onclick="addBasket('${key}')">+ recipe</button>`;
   try{ const d=await (await fetch(`/v1/ingredient/${encodeURIComponent(key)}`)).json();
     const n=d.nutrition&&d.nutrition.per_100g; if(n) el.innerHTML+=`<div class=muted style="margin-top:5px">${n.kcal} kcal · ${n.protein_g}g protein · ${n.fat_g}g fat</div>`;
-    if(d.top_pairings&&d.top_pairings.length) el.innerHTML+=`<div class=muted style="margin-top:5px">pairs with: ${d.top_pairings.map(p=>disp(p.ingredient)).join(', ')}</div>`;
   }catch(e){}
+  document.getElementById('ba').value=key.replace(/_/g,' ');
+  loadTrios(key);
+}
+async function loadTrios(key){
+  const t=document.getElementById('trios'); t.innerHTML='<span class=muted>finding trios…</span>';
+  try{
+    const d=await (await fetch(`/v1/trio/${encodeURIComponent(key)}?limit=6`)).json();
+    if(!d.trios||!d.trios.length){ t.innerHTML='<span class=muted>No strong trios found.</span>'; return; }
+    t.innerHTML=d.trios.map(x=>`<span class=tchip onclick="addBasket('${key}');addBasket('${x.a}');addBasket('${x.b}')">${disp(key)} + <b>${disp(x.a)}</b> + <b>${disp(x.b)}</b></span>`).join('');
+  }catch(e){ t.innerHTML='<span class=muted>Trios unavailable.</span>'; }
+}
+async function doBridge(){
+  const a=document.getElementById('ba').value.trim().toLowerCase().replace(/ /g,'_');
+  const c=document.getElementById('bc').value.trim().toLowerCase().replace(/ /g,'_');
+  const out=document.getElementById('bridgeout');
+  if(!a||!c){ out.innerHTML='<div class=muted style="margin-top:6px">Enter two ingredients.</div>'; return; }
+  out.innerHTML='<div class=muted style="margin-top:6px">Bridging…</div>';
+  try{
+    const d=await (await fetch(`/v1/bridge?a=${encodeURIComponent(a)}&c=${encodeURIComponent(c)}&limit=6`)).json();
+    if(!d.bridges||!d.bridges.length){ out.innerHTML='<div class=muted style="margin-top:6px">No bridge found between these two.</div>'; return; }
+    const direct=d.bridges[0].direct_link;
+    const head=(direct!=null&&direct<=0)?`<div class=muted style="margin-top:6px">${disp(a)} and ${disp(c)} don't pair directly — try bridging through:</div>`:`<div class=muted style="margin-top:6px">Connectors between ${disp(a)} and ${disp(c)}:</div>`;
+    out.innerHTML=head+'<div style="margin-top:6px">'+d.bridges.map(b=>`<span class=tchip onclick="addBasket('${a}');addBasket('${b.bridge}');addBasket('${c}')"><b>${disp(b.bridge)}</b> <span class="badge b-${b.via}">${b.via}</span></span>`).join('')+'</div>';
+  }catch(e){ out.innerHTML='<div class=muted style="margin-top:6px">Bridge unavailable.</div>'; }
 }
 function addBasket(key){ if(!basket.includes(key)){basket.push(key);renderBasket();} }
 function renderBasket(){
