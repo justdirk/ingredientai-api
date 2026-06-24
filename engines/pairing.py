@@ -27,6 +27,28 @@ def pair(ingredient: str, mode: str = "balanced", limit: int = 20) -> list[dict]
     raise NotImplementedError("No data source. Configure Supabase or set FLAVORGRAPH_DIR.")
 
 
+def trio(ingredient: str, limit: int = 8) -> list[dict]:
+    """Affinities-in-threes (Supabase only)."""
+    from engines import supabase_index
+    if _supabase_ok():
+        try:
+            return supabase_index.trio(ingredient, limit=limit)
+        except (httpx.HTTPError, OSError):
+            pass
+    raise NotImplementedError("Trios require the Supabase backend.")
+
+
+def bridge(a: str, c: str, limit: int = 8) -> list[dict]:
+    """Flavour-bridging between two ingredients (Supabase only)."""
+    from engines import supabase_index
+    if _supabase_ok():
+        try:
+            return supabase_index.bridge(a, c, limit=limit)
+        except (httpx.HTTPError, OSError):
+            pass
+    raise NotImplementedError("Bridging requires the Supabase backend.")
+
+
 def substitute(ingredient: str, limit: int = 10, same_category_only: bool = False) -> list[dict]:
     from engines import supabase_index, local_index
     if _supabase_ok():
