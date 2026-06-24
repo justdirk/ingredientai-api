@@ -50,7 +50,9 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:10px;paddin
 .pc .n{font-weight:600;font-size:15px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center}
 .badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;background:#eef6f1;color:#0f6e56}
 .bar{height:6px;border-radius:6px;background:#eee;overflow:hidden;margin:5px 0}.bar>span{display:block;height:100%;background:var(--accent)}
-.why{font-size:12px;color:var(--mut)}.why b{color:var(--ink);font-weight:600}.err{color:#a32d2d;font-size:14px}
+.notes{font-size:12.5px;color:var(--ink);margin:2px 0 5px}.notes b{color:var(--accent);font-weight:600}
+.why{font-size:11px;color:var(--mut)}.why b{color:var(--ink);font-weight:600}.err{color:#a32d2d;font-size:14px}
+.cat{font-size:10px;color:var(--mut);font-weight:400}
 .foot{margin-top:30px;font-size:12px;color:var(--mut);border-top:1px solid var(--line);padding-top:12px}
 </style></head><body><div class=wrap>
 <h1>IngredientAI</h1><p class=sub>Explainable flavour pairing over 6,629 ingredients - every suggestion shows why.</p>
@@ -83,7 +85,7 @@ async function load(){
     const nut=det&&det.nutrition;
     if(nut){h+='<div class=nut>'+Object.entries(nut).map(([k,v])=>`<div class=stat><div class=v>${v.value??v}</div><div class=k>${k.replace('_g','').replace('_',' ')}</div></div>`).join('')+'</div>';}
     h+=`<div class=sec>Pairs well with - ${mode==='safe'?'consensus':'experimental'}</div><div class=grid>`;
-    h+=pair.pairings.map(p=>`<div class=pc><div class=n>${p.display||disp(p.ingredient)}</div><div class=bar><span style="width:${Math.round(p.explanation.embedding_cosine*100)}%"></span></div><div class=why>similarity <b>${p.explanation.embedding_cosine.toFixed(2)}</b> &middot; <b>${p.explanation.shared_compounds}</b> shared compounds</div></div>`).join('');
+    h+=pair.pairings.map(p=>{const e=p.explanation; const notes=(e.shared_notes&&e.shared_notes.length)?`<div class=notes>shared notes: <b>${e.shared_notes.slice(0,5).join(', ')}</b></div>`:''; const cat=p.category?`<span class=cat>${p.category}</span>`:''; return `<div class=pc><div class=n>${p.display||disp(p.ingredient)} ${cat}</div>${notes}<div class=why>${e.shared_compounds} shared compounds &middot; similarity ${e.embedding_cosine.toFixed(2)}</div></div>`;}).join('');
     h+='</div><div class=sec>Can be substituted by</div><div class=grid>';
     h+=sub.substitutes.map(s=>`<div class=pc><div class=n>${s.display||disp(s.ingredient)}${s.explanation.same_category?'<span class=badge>same type</span>':''}</div><div class=bar><span style="width:${Math.round(s.explanation.similarity*100)}%"></span></div><div class=why>similarity <b>${s.explanation.similarity.toFixed(2)}</b> &middot; <b>${s.explanation.shared_compounds}</b> shared${s.category?' &middot; '+s.category:''}</div></div>`).join('');
     h+='</div>';panel.innerHTML=h;

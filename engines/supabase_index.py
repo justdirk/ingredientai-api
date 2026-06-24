@@ -24,14 +24,23 @@ def _rpc(fn: str, payload: dict):
 
 
 def pair(ingredient: str, mode: str = "balanced", limit: int = 20) -> list[dict]:
-    rows = _rpc("pair_ingredient", {"p_name": ingredient, "p_mode": mode, "p_limit": limit})
+    # pair_rich = pgvector neighbours + shared flavour molecules, explained by the
+    # most DISTINCTIVE shared flavour notes (IDF-weighted). Falls back to pair_ingredient.
+    rows = _rpc("pair_rich", {"p_name": ingredient, "p_mode": mode, "p_limit": limit})
     if not rows:
-        raise KeyError(f"unknown ingredient: {ingredient!r}")
+        rows = _rpc("pair_ingredient", {"p_name": ingredient, "p_mode": mode, "p_limit": limit})
+        if not rows:
+            raise KeyError(f"unknown ingredient: {ingredient!r}")
     return [{
         "ingredient": r["ingredient"],
         "display": cleaning.display_name(r["ingredient"]),
+        "category": r.get("category"),
         "score": r["score"],
-        "explanation": {"embedding_cosine": r["embedding_cosine"], "shared_compounds": r["shared_compounds"]},
+        "explanation": {
+            "embedding_cosine": r["embedding_cosine"],
+            "shared_compounds": r["shared_compounds"],
+            "shared_notes": r.get("shared_notes") or [],
+        },
     } for r in rows]
 
 
