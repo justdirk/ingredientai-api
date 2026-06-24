@@ -76,39 +76,50 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
 <div class=hint>Graph: FlavorGraph2Vec similarity + shared flavour molecules. Notes from FlavorDB (non-commercial). Edges show the strongest shared note.</div>
 <script>
 let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[];
-const CAT={Fruit:'#e57',Spice:'#d83',Dairy:'#5ad','Plant/Vegetable':'#3a6','Meat/Animal Product':'#c55',Seafood:'#39c','Nut/Seed':'#b84','Beverage Alcoholic':'#a6c','Herb':'#3a6',Flower:'#d6a',Fungus:'#987'};
+const CAT={Fruit:'#e07a5f',Spice:'#d9883b',Dairy:'#4f9fd0','Plant/Vegetable':'#3a9d5d','Meat/Animal Product':'#c1554f',Seafood:'#3a8fc4','Nut/Seed':'#b07a3c','Beverage Alcoholic':'#9b6fc0','Beverage':'#7a9bd0',Flower:'#d07aa8',Fungus:'#8a7d6b','Sauce/Powder/Dressing':'#a89a6a','Cereal/Crop/Bean':'#c0a050','Bakery/Dessert/Snack':'#caa06a'};
 const disp=s=>s.replace(/_/g,' ').replace(/\\b\\w/g,c=>c.toUpperCase());
-function color(cat){return CAT[cat]||'#8a9'}
+function color(cat){return CAT[cat]||'#8a9a8e'}
 function setMode(m){mode=m;document.querySelectorAll('.toggle button').forEach(b=>b.className=b.dataset.m===m?'on':'');}
 function ensure(){
   if(net)return;
   nodes=new vis.DataSet([]); edges=new vis.DataSet([]);
+  window.nodes=nodes; window.edges=edges; window.expand=expand;
   net=new vis.Network(document.getElementById('graph'),{nodes,edges},{
-    nodes:{shape:'dot',size:14,font:{size:14,color:'#22201b'},borderWidth:0},
-    edges:{color:{color:'#cfcabd',highlight:'#1d9e75'},font:{size:10,color:'#6f6b61',strokeWidth:3,strokeColor:'#faf9f6'},smooth:{type:'continuous'}},
-    physics:{barnesHut:{springLength:130,gravitationalConstant:-4000},stabilization:{iterations:120}},
-    interaction:{hover:true}
+    physics:false,
+    nodes:{shape:'dot',size:15,borderWidth:2,color:{border:'#fff'},font:{size:14,color:'#22201b'}},
+    edges:{color:{color:'#d8d3c8',highlight:'#1d9e75',hover:'#1d9e75'},width:1.5,
+      font:{size:10,color:'#6f6b61',strokeWidth:4,strokeColor:'#faf9f6',align:'middle'},
+      smooth:{type:'curvedCW',roundness:0.12}},
+    interaction:{hover:true,dragNodes:true,dragView:true,zoomView:true,tooltipDelay:120}
   });
-  net.on('click',p=>{if(p.nodes.length)focus(p.nodes[0]);});
-  net.on('doubleClick',p=>{if(p.nodes.length)addBasket(p.nodes[0]);});
+  net.on('click',p=>{ if(p.nodes.length){ showFocus(p.nodes[0]); expand(p.nodes[0]); }});
+  net.on('doubleClick',p=>{ if(p.nodes.length) addBasket(p.nodes[0]); });
 }
-function addNode(key,cat){ if(!nodes.get(key)) nodes.add({id:key,label:disp(key),color:color(cat)}); }
+function pos(id){ try{ return net.getPositions([id])[id]; }catch(e){ return {x:0,y:0}; } }
+function nodeCat(key){ const n=nodes.get(key); return n?n.cat:null; }
+function addNodeAt(key,cat,x,y){ if(nodes.get(key)) return false; nodes.add({id:key,label:disp(key),cat,color:color(cat),x,y}); return true; }
 async function expand(key){
-  if(expanded.has(key+mode))return; expanded.add(key+mode);
-  let d; try{ d=await (await fetch(`/v1/pair/${encodeURIComponent(key)}?mode=${mode}&limit=7`)).json(); }catch(e){return;}
-  if(!d.pairings)return;
-  d.pairings.forEach(p=>{ addNode(p.ingredient,p.category);
-    const id=key+'|'+p.ingredient;
-    if(!edges.get(id)) edges.add({id,from:key,to:p.ingredient,label:(p.explanation.shared_notes||[])[0]||''});
+  if(expanded.has(key+'|'+mode)) return; expanded.add(key+'|'+mode);
+  nodes.update({id:key,borderWidth:4,color:{border:'#1d9e75',background:color(nodeCat(key))}});
+  let d; try{ d=await (await fetch(`/v1/pair/${encodeURIComponent(key)}?mode=${mode}&limit=8`)).json(); }catch(e){ return; }
+  if(!d.pairings||!d.pairings.length) return;
+  const pp=pos(key), n=d.pairings.length, R=175, base=(key.length%6);
+  d.pairings.forEach((p,i)=>{
+    const a=base+(i/n)*2*Math.PI;
+    addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*24-12), pp.y+R*Math.sin(a)+(Math.random()*24-12));
+    const eid=key+'|'+p.ingredient;
+    const notes=(p.explanation.shared_notes||[]);
+    if(!edges.get(eid)&&!edges.get(p.ingredient+'|'+key))
+      edges.add({id:eid,from:key,to:p.ingredient,label:notes[0]||'',title:notes.join(', ')||'similar profile'});
   });
+  net.fit({animation:{duration:450}});
 }
-async function focus(key){
+async function showFocus(key){
   const el=document.getElementById('focus');
-  el.innerHTML=`<b style="font-size:15px">${disp(key)}</b> <button class=go style="padding:3px 8px;font-size:11px" onclick="addBasket('${key}')">+ recipe</button><div style="margin-top:6px"></div>`;
-  await expand(key);
-  // show this node's notes via a pair lookup (its strongest shared notes with neighbours)
+  el.innerHTML=`<b style="font-size:15px">${disp(key)}</b> <button class=go style="padding:3px 8px;font-size:11px" onclick="addBasket('${key}')">+ recipe</button>`;
   try{ const d=await (await fetch(`/v1/ingredient/${encodeURIComponent(key)}`)).json();
-    const n=d.nutrition&&d.nutrition.per_100g; if(n) el.innerHTML+=`<div class=muted>${n.kcal} kcal · ${n.protein_g}g protein · ${n.fat_g}g fat</div>`;
+    const n=d.nutrition&&d.nutrition.per_100g; if(n) el.innerHTML+=`<div class=muted style="margin-top:5px">${n.kcal} kcal · ${n.protein_g}g protein · ${n.fat_g}g fat</div>`;
+    if(d.top_pairings&&d.top_pairings.length) el.innerHTML+=`<div class=muted style="margin-top:5px">pairs with: ${d.top_pairings.map(p=>disp(p.ingredient)).join(', ')}</div>`;
   }catch(e){}
 }
 function addBasket(key){ if(!basket.includes(key)){basket.push(key);renderBasket();} }
@@ -129,7 +140,7 @@ async function build(){
 }
 function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear();
   const k=document.getElementById('q').value.trim().toLowerCase().replace(/ /g,'_');
-  addNode(k,null); focus(k);
+  addNodeAt(k,null,0,0); net.moveTo({position:{x:0,y:0},scale:0.9}); showFocus(k); expand(k);
 }
 window.addEventListener('load',start);
 </script></body></html>"""
