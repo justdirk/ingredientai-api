@@ -24,8 +24,8 @@ def _rpc(fn: str, payload: dict):
 
 
 def pair(ingredient: str, mode: str = "balanced", limit: int = 20) -> list[dict]:
-    # pair_rich = pgvector neighbours + shared flavour molecules, explained by the
-    # most DISTINCTIVE shared flavour notes (IDF-weighted). Falls back to pair_ingredient.
+    # pair_rich = co-occurrence consensus + embedding + most DISTINCTIVE shared notes
+    # (IDF-weighted), with a Bible-style strength tier. Falls back to pair_ingredient.
     rows = _rpc("pair_rich", {"p_name": ingredient, "p_mode": mode, "p_limit": limit})
     if not rows:
         rows = _rpc("pair_ingredient", {"p_name": ingredient, "p_mode": mode, "p_limit": limit})
@@ -36,11 +36,34 @@ def pair(ingredient: str, mode: str = "balanced", limit: int = 20) -> list[dict]
         "display": cleaning.display_name(r["ingredient"]),
         "category": r.get("category"),
         "score": r["score"],
+        "tier": r.get("tier"),
         "explanation": {
             "embedding_cosine": r["embedding_cosine"],
             "shared_compounds": r["shared_compounds"],
             "shared_notes": r.get("shared_notes") or [],
         },
+    } for r in rows]
+
+
+def trio(ingredient: str, limit: int = 8) -> list[dict]:
+    """Affinities-in-threes: anchor + two partners that all mutually co-occur."""
+    rows = _rpc("pair_trio", {"p_name": ingredient, "p_limit": limit})
+    return [{
+        "a": r["partner_a"], "a_display": cleaning.display_name(r["partner_a"]),
+        "b": r["partner_b"], "b_display": cleaning.display_name(r["partner_b"]),
+        "score": r["score"], "why": r.get("why"),
+    } for r in rows]
+
+
+def bridge(a: str, c: str, limit: int = 8) -> list[dict]:
+    """Flavour-bridging (Simas et al.): an intermediate linking two ingredients that
+    don't directly pair — via real recipes first, else shared aroma notes."""
+    rows = _rpc("flavor_bridge", {"p_a": a, "p_c": c, "p_limit": limit})
+    return [{
+        "bridge": r["bridge"], "display": cleaning.display_name(r["bridge"]),
+        "category": r.get("category"), "score": r["score"],
+        "a_link": r.get("a_link"), "c_link": r.get("c_link"),
+        "direct_link": r.get("direct_link"), "via": r.get("via"),
     } for r in rows]
 
 
