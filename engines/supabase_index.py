@@ -59,6 +59,11 @@ def substitute(ingredient: str, limit: int = 10, same_category_only: bool = Fals
     } for r in rows]
 
 
+def common_notes(names: list[str]) -> list[str]:
+    rows = _rpc("common_notes", {"p_names": names})
+    return [r["note"] for r in rows]
+
+
 def detail(ingredient: str) -> dict:
     d = _rpc("ingredient_detail", {"p_name": ingredient})
     if not d or d.get("category") is None and d.get("nutrition") is None and not d.get("top_pairings"):

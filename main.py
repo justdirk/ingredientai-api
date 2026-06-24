@@ -1,5 +1,5 @@
-"""IngredientAI API — FastAPI entrypoint. Serves a small test UI at / plus the
-/v1 pairing endpoints (Supabase-backed in production)."""
+"""IngredientAI API — FastAPI entrypoint. Serves the interactive pairing-graph
+explorer at / plus the /v1 endpoints (Supabase-backed in production)."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -7,21 +7,19 @@ from fastapi.responses import HTMLResponse
 from settings import settings
 from routes import pairing
 
-app = FastAPI(title="IngredientAI API", version="0.1.0")
+app = FastAPI(title="IngredientAI API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"], allow_headers=["*"],
 )
-
 app.include_router(pairing.router)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "environment": settings.environment, "version": "0.1.0"}
+    return {"status": "ok", "environment": settings.environment, "version": "0.2.0"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -31,65 +29,107 @@ def home():
 
 INDEX_HTML = """<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>IngredientAI</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
 <style>
 :root{--bg:#faf9f6;--card:#fff;--line:#e7e4dc;--ink:#22201b;--mut:#6f6b61;--accent:#1d9e75}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
-.wrap{max-width:860px;margin:0 auto;padding:26px 18px 60px}
-h1{font-size:22px;font-weight:600;margin:0 0 2px}.sub{color:var(--mut);font-size:14px;margin:0 0 18px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
-input{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:15px;background:#fff;min-width:220px;flex:1}
-.toggle{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.toggle button{border:0;background:#fff;padding:9px 15px;font-size:13px;cursor:pointer}.toggle button.on{background:var(--accent);color:#fff}
-button.go{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 16px;font-size:14px;cursor:pointer}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 16px}.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;cursor:pointer}
-.head{display:flex;align-items:baseline;gap:10px;margin:10px 0 4px}.head h2{font-size:20px;font-weight:600;margin:0}.cat{color:var(--mut);font-size:13px}
-.nut{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px}.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 11px;min-width:70px}.stat .v{font-size:17px;font-weight:600}.stat .k{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
-.sec{font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 9px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:9px}
-.pc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
-.pc .n{font-weight:600;font-size:15px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center}
-.badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;background:#eef6f1;color:#0f6e56}
-.bar{height:6px;border-radius:6px;background:#eee;overflow:hidden;margin:5px 0}.bar>span{display:block;height:100%;background:var(--accent)}
-.notes{font-size:12.5px;color:var(--ink);margin:2px 0 5px}.notes b{color:var(--accent);font-weight:600}
-.why{font-size:11px;color:var(--mut)}.why b{color:var(--ink);font-weight:600}.err{color:#a32d2d;font-size:14px}
-.cat{font-size:10px;color:var(--mut);font-weight:400}
-.foot{margin-top:30px;font-size:12px;color:var(--mut);border-top:1px solid var(--line);padding-top:12px}
-</style></head><body><div class=wrap>
-<h1>IngredientAI</h1><p class=sub>Explainable flavour pairing over 6,629 ingredients - every suggestion shows why.</p>
-<div class=row>
-  <input id=q placeholder="Type an ingredient, e.g. basil" value="basil" onkeydown="if(event.key==='Enter')load()">
-  <div class=toggle><button id=m-safe class=on onclick="setMode('safe')">Safe</button><button id=m-exp onclick="setMode('experimental')">Experimental</button></div>
-  <button class=go onclick=load()>Go</button>
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;height:100vh}
+header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+h1{font-size:17px;font-weight:600;margin:0 14px 0 0}
+input,select{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:14px;background:#fff}
+input{min-width:180px}
+.toggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.toggle button{border:0;background:#fff;padding:8px 12px;font-size:12.5px;cursor:pointer}.toggle button.on{background:var(--accent);color:#fff}
+button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer}
+.main{flex:1;display:flex;min-height:0}
+#graph{flex:1;min-width:0}
+.side{width:300px;border-left:1px solid var(--line);padding:14px;overflow:auto;background:#fff}
+.h{font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 7px}
+.notes{font-size:13px}.notes b{color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;background:#f3f6f4;cursor:pointer}
+.chip.add{background:var(--accent);color:#fff;border-color:var(--accent)}
+.rip{font-size:13.5px;line-height:1.5;margin-top:8px;background:#f7f6f2;border:1px solid var(--line);border-radius:10px;padding:10px}
+.muted{color:var(--mut);font-size:12px}
+.hint{font-size:12px;color:var(--mut);padding:6px 16px;border-top:1px solid var(--line)}
+</style></head><body>
+<header>
+  <h1>IngredientAI</h1>
+  <input id=q placeholder="Start with an ingredient…" value="garlic" onkeydown="if(event.key==='Enter')start()">
+  <button class=go onclick=start()>Explore</button>
+  <div class=toggle><button data-m=safe onclick="setMode('safe')">Safe</button><button data-m=balanced class=on onclick="setMode('balanced')">Balanced</button><button data-m=experimental onclick="setMode('experimental')">Experimental</button></div>
+  <span class=muted>click a node to expand · double-click to add to your recipe</span>
+</header>
+<div class=main>
+  <div id=graph></div>
+  <div class=side>
+    <div class=h>Focused</div>
+    <div id=focus class=muted>Click a node to see its flavour notes.</div>
+    <div class=h>Your recipe</div>
+    <div id=basket class=chips><span class=muted>double-click nodes to add</span></div>
+    <div class=h>Make it a…</div>
+    <select id=rtype><option>salad</option><option>pasta sauce</option><option>main dish</option><option>marinade</option><option>dessert</option><option>cocktail</option><option>soup</option><option>dressing</option></select>
+    <button class=go style="margin-top:8px" onclick=build()>Build it</button>
+    <div id=recipe></div>
+  </div>
 </div>
-<div class=chips id=chips></div>
-<div id=panel></div>
-<div class=foot>Engine: pgvector nearest-neighbour (FlavorGraph, Apache-2.0) + shared flavour-compound overlap; nutrition from USDA. Served by FastAPI on Railway, data in Supabase.</div>
-</div><script>
-let mode='safe';
-const chips=['basil','strawberry','tomato','garlic','dark_chocolate','coffee','salmon','lemon','mushroom','ginger'];
-document.getElementById('chips').innerHTML=chips.map(c=>`<span class=chip onclick="pick('${c}')">${c.replace(/_/g,' ')}</span>`).join('');
-function pick(c){document.getElementById('q').value=c;load();}
-function setMode(m){mode=m;document.getElementById('m-safe').className=m==='safe'?'on':'';document.getElementById('m-exp').className=m==='experimental'?'on':'';load();}
-function disp(s){return s.replace(/_/g,' ').replace(/\\b\\w/g,c=>c.toUpperCase());}
-async function jget(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status);return r.json();}
-async function load(){
-  const name=document.getElementById('q').value.trim().toLowerCase().replace(/ /g,'_');
-  const panel=document.getElementById('panel');panel.innerHTML='Loading...';
-  try{
-    const [pair,sub,det]=await Promise.all([
-      jget(`/v1/pair/${encodeURIComponent(name)}?mode=${mode}&limit=8`),
-      jget(`/v1/substitute/${encodeURIComponent(name)}?limit=6`),
-      jget(`/v1/ingredient/${encodeURIComponent(name)}`).catch(()=>null)
-    ]);
-    let h=`<div class=head><h2>${disp(name)}</h2></div>`;
-    const nut=det&&det.nutrition;
-    if(nut){h+='<div class=nut>'+Object.entries(nut).map(([k,v])=>`<div class=stat><div class=v>${v.value??v}</div><div class=k>${k.replace('_g','').replace('_',' ')}</div></div>`).join('')+'</div>';}
-    h+=`<div class=sec>Pairs well with - ${mode==='safe'?'consensus':'experimental'}</div><div class=grid>`;
-    h+=pair.pairings.map(p=>{const e=p.explanation; const notes=(e.shared_notes&&e.shared_notes.length)?`<div class=notes>shared notes: <b>${e.shared_notes.slice(0,5).join(', ')}</b></div>`:''; const cat=p.category?`<span class=cat>${p.category}</span>`:''; return `<div class=pc><div class=n>${p.display||disp(p.ingredient)} ${cat}</div>${notes}<div class=why>${e.shared_compounds} shared compounds &middot; similarity ${e.embedding_cosine.toFixed(2)}</div></div>`;}).join('');
-    h+='</div><div class=sec>Can be substituted by</div><div class=grid>';
-    h+=sub.substitutes.map(s=>`<div class=pc><div class=n>${s.display||disp(s.ingredient)}${s.explanation.same_category?'<span class=badge>same type</span>':''}</div><div class=bar><span style="width:${Math.round(s.explanation.similarity*100)}%"></span></div><div class=why>similarity <b>${s.explanation.similarity.toFixed(2)}</b> &middot; <b>${s.explanation.shared_compounds}</b> shared${s.category?' &middot; '+s.category:''}</div></div>`).join('');
-    h+='</div>';panel.innerHTML=h;
-  }catch(e){panel.innerHTML=`<p class=err>No data for "${disp(name)}". Try another ingredient (e.g. basil, tomato, garlic).</p>`;}
+<div class=hint>Graph: FlavorGraph2Vec similarity + shared flavour molecules. Notes from FlavorDB (non-commercial). Edges show the strongest shared note.</div>
+<script>
+let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[];
+const CAT={Fruit:'#e57',Spice:'#d83',Dairy:'#5ad','Plant/Vegetable':'#3a6','Meat/Animal Product':'#c55',Seafood:'#39c','Nut/Seed':'#b84','Beverage Alcoholic':'#a6c','Herb':'#3a6',Flower:'#d6a',Fungus:'#987'};
+const disp=s=>s.replace(/_/g,' ').replace(/\\b\\w/g,c=>c.toUpperCase());
+function color(cat){return CAT[cat]||'#8a9'}
+function setMode(m){mode=m;document.querySelectorAll('.toggle button').forEach(b=>b.className=b.dataset.m===m?'on':'');}
+function ensure(){
+  if(net)return;
+  nodes=new vis.DataSet([]); edges=new vis.DataSet([]);
+  net=new vis.Network(document.getElementById('graph'),{nodes,edges},{
+    nodes:{shape:'dot',size:14,font:{size:14,color:'#22201b'},borderWidth:0},
+    edges:{color:{color:'#cfcabd',highlight:'#1d9e75'},font:{size:10,color:'#6f6b61',strokeWidth:3,strokeColor:'#faf9f6'},smooth:{type:'continuous'}},
+    physics:{barnesHut:{springLength:130,gravitationalConstant:-4000},stabilization:{iterations:120}},
+    interaction:{hover:true}
+  });
+  net.on('click',p=>{if(p.nodes.length)focus(p.nodes[0]);});
+  net.on('doubleClick',p=>{if(p.nodes.length)addBasket(p.nodes[0]);});
 }
-load();
+function addNode(key,cat){ if(!nodes.get(key)) nodes.add({id:key,label:disp(key),color:color(cat)}); }
+async function expand(key){
+  if(expanded.has(key+mode))return; expanded.add(key+mode);
+  let d; try{ d=await (await fetch(`/v1/pair/${encodeURIComponent(key)}?mode=${mode}&limit=7`)).json(); }catch(e){return;}
+  if(!d.pairings)return;
+  d.pairings.forEach(p=>{ addNode(p.ingredient,p.category);
+    const id=key+'|'+p.ingredient;
+    if(!edges.get(id)) edges.add({id,from:key,to:p.ingredient,label:(p.explanation.shared_notes||[])[0]||''});
+  });
+}
+async function focus(key){
+  const el=document.getElementById('focus');
+  el.innerHTML=`<b style="font-size:15px">${disp(key)}</b> <button class=go style="padding:3px 8px;font-size:11px" onclick="addBasket('${key}')">+ recipe</button><div style="margin-top:6px"></div>`;
+  await expand(key);
+  // show this node's notes via a pair lookup (its strongest shared notes with neighbours)
+  try{ const d=await (await fetch(`/v1/ingredient/${encodeURIComponent(key)}`)).json();
+    const n=d.nutrition&&d.nutrition.per_100g; if(n) el.innerHTML+=`<div class=muted>${n.kcal} kcal · ${n.protein_g}g protein · ${n.fat_g}g fat</div>`;
+  }catch(e){}
+}
+function addBasket(key){ if(!basket.includes(key)){basket.push(key);renderBasket();} }
+function renderBasket(){
+  const b=document.getElementById('basket');
+  b.innerHTML=basket.length?basket.map(k=>`<span class="chip add" onclick="rmBasket('${k}')">${disp(k)} ✕</span>`).join(''):'<span class=muted>double-click nodes to add</span>';
+}
+function rmBasket(k){basket=basket.filter(x=>x!==k);renderBasket();}
+async function build(){
+  const out=document.getElementById('recipe');
+  if(basket.length<2){out.innerHTML='<div class=muted style="margin-top:8px">Add at least two ingredients.</div>';return;}
+  out.innerHTML='<div class=muted style="margin-top:8px">Thinking…</div>';
+  const type=document.getElementById('rtype').value;
+  try{
+    const r=await (await fetch('/v1/recipe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ingredients:basket,type})})).json();
+    out.innerHTML=`<div class=rip><b>${r.suggestion}</b>${r.shared_theme&&r.shared_theme.length?`<div class=muted style="margin-top:6px">flavour bridge: ${r.shared_theme.slice(0,6).join(', ')}</div>`:''}</div>`;
+  }catch(e){ out.innerHTML='<div class=muted>Could not build.</div>'; }
+}
+function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear();
+  const k=document.getElementById('q').value.trim().toLowerCase().replace(/ /g,'_');
+  addNode(k,null); focus(k);
+}
+window.addEventListener('load',start);
 </script></body></html>"""
