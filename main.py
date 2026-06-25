@@ -9,7 +9,7 @@ from settings import settings
 from routes import pairing
 from mobile import MOBILE_HTML
 
-app = FastAPI(title="IngredientAI API", version="0.5.0")
+app = FastAPI(title="IngredientAI API", version="0.5.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,7 +21,7 @@ app.include_router(pairing.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "environment": settings.environment, "version": "0.5.0"}
+    return {"status": "ok", "environment": settings.environment, "version": "0.5.1"}
 
 
 def _is_phone(ua: str) -> bool:
@@ -122,7 +122,7 @@ a.go{text-decoration:none;color:var(--ink)}
 </div>
 <div class=hint id=foot></div>
 <script>
-let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[], booted=false;
+let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[];
 let lang='en', NAMES={}, NOTES={};
 const isMobile=()=>window.matchMedia('(max-width:760px)').matches;
 const I18N={
@@ -192,15 +192,16 @@ function ensure(){
 function pos(id){ try{ return net.getPositions([id])[id]; }catch(e){ return {x:0,y:0}; } }
 function nodeCat(key){ const n=nodes.get(key); return n?n.cat:null; }
 function addNodeAt(key,cat,x,y){ if(nodes.get(key)) return false; nodes.add({id:key,label:disp(key),cat,color:color(cat),x,y}); return true; }
-async function expand(key){
-  if(expanded.has(key+'|'+mode)) return; expanded.add(key+'|'+mode);
+async function expand(key,lim){
+  lim=lim||10;
+  if(expanded.has(key+'|'+mode)) return []; expanded.add(key+'|'+mode);
   nodes.update({id:key,borderWidth:4,color:{border:'#1d9e75',background:color(nodeCat(key))}});
-  let d; try{ d=await (await fetch(`/v1/pair/${encodeURIComponent(key)}?mode=${mode}&limit=8`)).json(); }catch(e){ return; }
-  if(!d.pairings||!d.pairings.length) return;
-  const pp=pos(key), n=d.pairings.length, R=isMobile()?125:175, base=(key.length%6);
+  let d; try{ d=await (await fetch(`/v1/pair/${encodeURIComponent(key)}?mode=${mode}&limit=${lim}`)).json(); }catch(e){ return []; }
+  if(!d.pairings||!d.pairings.length) return [];
+  const pp=pos(key), n=d.pairings.length, R=isMobile()?130:200, base=(key.length%6);
   d.pairings.forEach((p,i)=>{
     const a=base+(i/n)*2*Math.PI;
-    addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*24-12), pp.y+R*Math.sin(a)+(Math.random()*24-12));
+    addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*30-15), pp.y+R*Math.sin(a)+(Math.random()*30-15));
     const eid=key+'|'+p.ingredient;
     const notes=(p.explanation.shared_notes||[]).map(dnote); const tier=p.tier||'';
     if(!edges.get(eid)&&!edges.get(p.ingredient+'|'+key))
@@ -208,7 +209,7 @@ async function expand(key){
         title:(tier?t('t_'+tier).toUpperCase()+' · ':'')+(notes.join(', ')||''),
         width:TW[tier]||1.5, color:{color:(TIER[tier]||'#d8d3c8'),highlight:TIER[tier]||'#1d9e75'}});
   });
-  if(!booted){ booted=true; try{ net.fit({animation:{duration:450}}); }catch(e){} }
+  return d.pairings.map(p=>p.ingredient);
 }
 async function showFocus(key){
   const el=document.getElementById('focus');
@@ -259,10 +260,14 @@ async function build(){
     out.innerHTML=`<div class=rip><b>${r.suggestion}</b>${theme.length?`<div class=muted style="margin-top:6px">${t('flav_bridge')}: ${theme.join(', ')}</div>`:''}</div>`;
   }catch(e){ out.innerHTML=`<div class=muted>${t('build_fail')}</div>`; }
 }
-function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear(); booted=false; renderBasket();
+async function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear(); renderBasket();
   const raw=document.getElementById('q').value.trim().toLowerCase();
   const k=raw.replace(/ /g,'_');
-  addNodeAt(k,null,0,0); net.moveTo({position:{x:0,y:0},scale:0.9}); showFocus(k); expand(k);
+  addNodeAt(k,null,0,0); net.moveTo({position:{x:0,y:0},scale:0.85}); showFocus(k);
+  const firsts=await expand(k, 14);
+  const topN=isMobile()?3:6;
+  for(let i=0;i<Math.min(topN, firsts.length); i++){ await expand(firsts[i], 7); }
+  try{ net.fit({animation:{duration:550}}); }catch(e){}
 }
 function init(){
   const nav=(navigator.language||'en').slice(0,2).toLowerCase();
