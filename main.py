@@ -9,7 +9,7 @@ from settings import settings
 from routes import pairing
 from mobile import MOBILE_HTML
 
-app = FastAPI(title="IngredientAI API", version="0.5.1")
+app = FastAPI(title="IngredientAI API", version="0.5.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,7 +21,7 @@ app.include_router(pairing.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "environment": settings.environment, "version": "0.5.1"}
+    return {"status": "ok", "environment": settings.environment, "version": "0.5.2"}
 
 
 def _is_phone(ua: str) -> bool:
@@ -264,7 +264,7 @@ async function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear()
   const raw=document.getElementById('q').value.trim().toLowerCase();
   const k=raw.replace(/ /g,'_');
   addNodeAt(k,null,0,0); net.moveTo({position:{x:0,y:0},scale:0.85}); showFocus(k);
-  const firsts=await expand(k, 14);
+  const firsts=await expand(k, 26);
   const topN=isMobile()?3:6;
   for(let i=0;i<Math.min(topN, firsts.length); i++){ await expand(firsts[i], 7); }
   try{ net.fit({animation:{duration:550}}); }catch(e){}
