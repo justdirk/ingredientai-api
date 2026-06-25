@@ -67,6 +67,11 @@ def bridge(a: str, c: str, limit: int = 8) -> list[dict]:
     } for r in rows]
 
 
+def i18n_bundle(lang: str) -> dict:
+    """Localized display dictionaries: {lang, names:{canonical:localized}, notes:{en:localized}}."""
+    return _rpc("i18n_bundle", {"p_lang": lang})
+
+
 def substitute(ingredient: str, limit: int = 10, same_category_only: bool = False) -> list[dict]:
     rows = _rpc("substitute_ingredient",
                 {"p_name": ingredient, "p_limit": limit, "p_same_category_only": same_category_only})
