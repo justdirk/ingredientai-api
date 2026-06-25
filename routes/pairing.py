@@ -76,6 +76,18 @@ def bridge(
     return {"a": a, "c": c, "bridges": results}
 
 
+@router.get("/i18n/{lang}")
+def i18n(lang: str):
+    """Localized display dictionaries for a language (names + flavour notes)."""
+    from engines import supabase_index
+    if lang == "en" or not supabase_index.available():
+        return {"lang": "en", "names": {}, "notes": {}}
+    try:
+        return supabase_index.i18n_bundle(lang)
+    except Exception:
+        return {"lang": lang, "names": {}, "notes": {}}
+
+
 @router.get("/substitute/{ingredient}")
 def substitute(
     ingredient: str,
