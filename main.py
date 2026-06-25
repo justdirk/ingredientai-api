@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from settings import settings
 from routes import pairing
 
-app = FastAPI(title="IngredientAI API", version="0.4.0")
+app = FastAPI(title="IngredientAI API", version="0.4.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,7 +19,7 @@ app.include_router(pairing.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "environment": settings.environment, "version": "0.4.0"}
+    return {"status": "ok", "environment": settings.environment, "version": "0.4.1"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -28,12 +28,12 @@ def home():
 
 
 INDEX_HTML = """<!doctype html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>IngredientAI</title>
+<meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>IngredientAI</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js"></script>
 <style>
 :root{--bg:#faf9f6;--card:#fff;--line:#e7e4dc;--ink:#22201b;--mut:#6f6b61;--accent:#1d9e75}
 *{box-sizing:border-box}html,body{margin:0;height:100%}
-body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;height:100vh}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;height:100vh;height:100dvh}
 header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 h1{font-size:17px;font-weight:600;margin:0 14px 0 0}
 input,select{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:14px;background:#fff}
@@ -43,13 +43,13 @@ input{min-width:160px}
 button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer}
 .main{flex:1;display:flex;min-height:0}
 #graph{flex:1;min-width:0}
-.side{width:312px;border-left:1px solid var(--line);padding:14px;overflow:auto;background:#fff}
+.side{width:312px;border-left:1px solid var(--line);padding:14px;overflow:auto;background:#fff;-webkit-overflow-scrolling:touch}
 .h{font-size:12px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 7px}
 .notes{font-size:13px}.notes b{color:var(--accent)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;background:#f3f6f4;cursor:pointer}
 .chip.add{background:var(--accent);color:#fff;border-color:var(--accent)}
-.tchip{border:1px solid var(--line);border-radius:9px;padding:6px 9px;font-size:12.5px;background:#f7f6f2;cursor:pointer;margin-bottom:6px;display:block}
+.tchip{border:1px solid var(--line);border-radius:9px;padding:8px 9px;font-size:12.5px;background:#f7f6f2;cursor:pointer;margin-bottom:6px;display:block}
 .rip{font-size:13.5px;line-height:1.5;margin-top:8px;background:#f7f6f2;border:1px solid var(--line);border-radius:10px;padding:10px}
 .muted{color:var(--mut);font-size:12px}
 .hint{font-size:12px;color:var(--mut);padding:6px 16px;border-top:1px solid var(--line)}
@@ -58,6 +58,23 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
 .b-recipe{background:#1d9e75}.b-aroma{background:#9b6fc0}
 .legend{font-size:11px;color:var(--mut);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row{display:flex;gap:6px}.row input{min-width:0;flex:1}
+@media (max-width:760px){
+  header{padding:8px 10px;gap:6px}
+  h1{font-size:15px;margin:0;order:1}
+  #lang{order:2;margin-left:auto}
+  #q{order:3;flex:1 1 100%;min-width:0}
+  #btnExplore{order:4}
+  .toggle{order:5;flex:1 1 auto}
+  .toggle button{flex:1}
+  .legend{display:none}
+  .main{flex-direction:column}
+  #graph{height:46vh;flex:0 0 auto;border-bottom:1px solid var(--line)}
+  .side{width:100%;border-left:0;flex:1 1 auto;min-height:0;padding:12px 14px 22px}
+  .h{margin:13px 0 6px}
+  .hint{display:none}
+  input,select,button.go,.toggle button{font-size:16px}
+  .tchip,.chip{padding:9px 11px;font-size:13px}
+}
 </style></head><body>
 <header>
   <h1>IngredientAI</h1>
@@ -90,6 +107,7 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
 <script>
 let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[], booted=false;
 let lang='en', NAMES={}, NOTES={};
+const isMobile=()=>window.matchMedia('(max-width:760px)').matches;
 const I18N={
  en:{ph_start:"Start with an ingredient…",explore:"Explore",m_safe:"Safe",m_balanced:"Balanced",m_experimental:"Experimental",t_classic:"classic",t_recommended:"recommended",t_interesting:"interesting",t_bold:"bold",focused:"Focused",focus_hint:"Click a node to expand it · double-click to add to recipe.",trios:"Flavour trios",trios_hint:"Affinities-in-threes appear here.",trios_finding:"finding trios…",trios_none:"No strong trios found.",trios_err:"Trios unavailable.",bridge_h:"Bridge two ingredients",bridge_btn:"Find the bridge",bridging:"Bridging…",bridge_enter:"Enter two ingredients.",bridge_none:"No bridge found between these two.",bridge_err:"Bridge unavailable.",recipe_h:"Your recipe",recipe_hint:"double-click nodes to add",makeit:"Make it a…",buildit:"Build it",thinking:"Thinking…",need2:"Add at least two ingredients.",build_fail:"Could not build.",flav_bridge:"flavour bridge",addrecipe:"+ recipe",protein:"protein",fat:"fat",nodirect:"%a and %c don't pair directly — try bridging through:",connectors:"Connectors between %a and %c:",foot:"Pairings ranked by recipe co-occurrence + flavour notes. Tiers reflect affinity strength. Click any node to grow the web. Trios = affinities-in-threes; Bridge links ingredients that don't directly pair."},
  pt:{ph_start:"Comece com um ingrediente…",explore:"Explorar",m_safe:"Seguro",m_balanced:"Equilibrado",m_experimental:"Experimental",t_classic:"clássico",t_recommended:"recomendado",t_interesting:"interessante",t_bold:"ousado",focused:"Em foco",focus_hint:"Clique num nó para expandir · clique duplo para adicionar à receita.",trios:"Trios de sabor",trios_hint:"As afinidades em trio aparecem aqui.",trios_finding:"buscando trios…",trios_none:"Nenhum trio forte encontrado.",trios_err:"Trios indisponíveis.",bridge_h:"Conectar dois ingredientes",bridge_btn:"Encontrar a ponte",bridging:"Conectando…",bridge_enter:"Digite dois ingredientes.",bridge_none:"Nenhuma ponte encontrada entre os dois.",bridge_err:"Ponte indisponível.",recipe_h:"Sua receita",recipe_hint:"clique duplo nos nós para adicionar",makeit:"Transforme em…",buildit:"Criar",thinking:"Pensando…",need2:"Adicione pelo menos dois ingredientes.",build_fail:"Não foi possível criar.",flav_bridge:"ponte de sabor",addrecipe:"+ receita",protein:"proteína",fat:"gordura",nodirect:"%a e %c não combinam diretamente — tente conectar através de:",connectors:"Conectores entre %a e %c:",foot:"Combinações ordenadas por coocorrência em receitas + notas de sabor. Os níveis refletem a força da afinidade. Clique em qualquer nó para expandir. Trios = afinidades em três; a Ponte liga ingredientes que não combinam diretamente."},
@@ -142,11 +160,12 @@ function ensure(){
   if(net)return;
   nodes=new vis.DataSet([]); edges=new vis.DataSet([]);
   window.nodes=nodes; window.edges=edges; window.expand=expand;
+  const mob=isMobile();
   net=new vis.Network(document.getElementById('graph'),{nodes,edges},{
     physics:false,
-    nodes:{shape:'dot',size:15,borderWidth:2,color:{border:'#fff'},font:{size:14,color:'#22201b'}},
+    nodes:{shape:'dot',size:mob?20:15,borderWidth:2,color:{border:'#fff'},font:{size:mob?16:14,color:'#22201b'}},
     edges:{color:{color:'#d8d3c8',highlight:'#1d9e75',hover:'#1d9e75'},width:1.5,
-      font:{size:10,color:'#6f6b61',strokeWidth:4,strokeColor:'#faf9f6',align:'middle'},
+      font:{size:mob?12:10,color:'#6f6b61',strokeWidth:4,strokeColor:'#faf9f6',align:'middle'},
       smooth:{type:'curvedCW',roundness:0.12}},
     interaction:{hover:true,dragNodes:true,dragView:true,zoomView:true,tooltipDelay:120}
   });
@@ -161,7 +180,7 @@ async function expand(key){
   nodes.update({id:key,borderWidth:4,color:{border:'#1d9e75',background:color(nodeCat(key))}});
   let d; try{ d=await (await fetch(`/v1/pair/${encodeURIComponent(key)}?mode=${mode}&limit=8`)).json(); }catch(e){ return; }
   if(!d.pairings||!d.pairings.length) return;
-  const pp=pos(key), n=d.pairings.length, R=175, base=(key.length%6);
+  const pp=pos(key), n=d.pairings.length, R=isMobile()?125:175, base=(key.length%6);
   d.pairings.forEach((p,i)=>{
     const a=base+(i/n)*2*Math.PI;
     addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*24-12), pp.y+R*Math.sin(a)+(Math.random()*24-12));
