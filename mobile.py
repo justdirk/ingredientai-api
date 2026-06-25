@@ -71,7 +71,7 @@ select{border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:
 </div>
 <script>
 var TB={classic:['#E1F5EE','#0F6E56'],recommended:['#E6F1FB','#185FA5'],interesting:['#F1EFE8','#5F5E5A'],bold:['#FAEEDA','#854F0B']};
-var CATC={Fruit:'#e07a5f',Spice:'#d9883b',Dairy:'#4f9fd0','Plant/Vegetable':'#3a9d5d',Vegetable:'#3a9d5d',Meat:'#c1554f','Meat/Animal Product':'#c1554f',Seafood:'#3a8fc4','Nut/Seed':'#b07a3c','Beverage Alcoholic':'#9b6fc0',Beverage:'#7a9bd0',Flower:'#d07aa8',Fungus:'#8a7d6b',Condiment:'#a89a6a','Bakery/Dessert':'#caa06a'};
+var CATC={Fruit:'#e07a5f',Spice:'#d9883b',Dairy:'#4f9fd0','Plant/Vegetable':'#3a9d5d',Vegetable:'#3a9d5d',Meat:'#c1554f','Meat/Animal Product':'#c1554f',Seafood:'#3a8fc4','Nut/Seed':'#b07a3c',Beverage Alcoholic:'#9b6fc0',Beverage:'#7a9bd0',Flower:'#d07aa8',Fungus:'#8a7d6b',Condiment:'#a89a6a','Bakery/Dessert':'#caa06a'};
 var M={
  en:{safe:'Safe',balanced:'Balanced',surprising:'Surprising',tExplore:'Explore',tTrios:'Trios',tBridge:'Bridge',tRecipe:'Recipe',search:'Search an ingredient',empty:'Add ingredients with the + buttons',tap:'Tap a card to explore it further',triosub:'Three-way affinities with',bridgesub:"Find what links two ingredients that don't pair directly.",findbridge:'Find the bridge',nobridge:'No bridge found between these two.',nopair:'No pairings found.',makeit:'Make it a…',build:'Build it',buildfail:'Could not build.',flav:'flavour bridge',directno:"%a and %c don't pair directly — bridge through:",connect:'Connectors between %a and %c:',enter2:'Enter two ingredients.',thinking:'Thinking…',recipe_built:'shared notes',via_recipe:'recipe',via_aroma:'aroma'},
  pt:{safe:'Seguro',balanced:'Equilibrado',surprising:'Surpreendente',tExplore:'Explorar',tTrios:'Trios',tBridge:'Ponte',tRecipe:'Receita',search:'Buscar um ingrediente',empty:'Adicione ingredientes com os botões +',tap:'Toque num cartão para explorar',triosub:'Afinidades em três com',bridgesub:'Descubra o que liga dois ingredientes que não combinam diretamente.',findbridge:'Encontrar a ponte',nobridge:'Nenhuma ponte encontrada entre os dois.',nopair:'Nenhuma combinação encontrada.',makeit:'Transforme em…',build:'Criar',buildfail:'Não foi possível criar.',flav:'ponte de sabor',directno:'%a e %c não combinam diretamente — conecte através de:',connect:'Conectores entre %a e %c:',enter2:'Digite dois ingredientes.',thinking:'Pensando…',recipe_built:'notas em comum',via_recipe:'receita',via_aroma:'aroma'},
@@ -107,7 +107,7 @@ function pcard(nm,tier,notes,cat,drill){
   var c=TB[tier]||TB.interesting;
   return '<div class=pcard data-go="'+(drill?nm:'')+'"><span class=dot style="background:'+(CATC[cat]||'#8a9a8e')+'"></span>'+
     '<div style="flex:1;min-width:0"><div class=nm>'+disp(nm)+'</div><div class=nt>'+(notes||'')+'</div></div>'+
-    '<span class=tier style="background:'+c[0]+';color:'+c[1]+'">'+t(tier==='classic'?'':'')+(tier)+'</span>'+
+    '<span class=tier style="background:'+c[0]+';color:'+c[1]+'">'+(tier)+'</span>'+
     '<button class=addb data-add="'+nm+'" aria-label="add">+</button>'+
     (drill?'<i class="ti ti-chevron-right chev"></i>':'')+'</div>';
 }
@@ -126,7 +126,7 @@ async function render(){
   if(st.tab==='explore'){
     b.innerHTML='<div class=empty><i class="ti ti-loader-2"></i></div>';
     try{
-      var d=await (await fetch('/v1/pair/'+encodeURIComponent(st.focus)+'?mode='+apiMode()+'&limit=12')).json();
+      var d=await (await fetch('/v1/pair/'+encodeURIComponent(st.focus)+'?mode='+apiMode()+'&limit=18')).json();
       var ps=d.pairings||[];
       if(!ps.length){ b.innerHTML='<div class=empty>'+t('nopair')+'</div>'; return; }
       var dotcat=ps[0]?ps[0].category:null;
@@ -199,7 +199,7 @@ document.body.addEventListener('click',function(e){
   if(mode){ st.mode=mode.dataset.m; render(); return; }
   if(go&&go.dataset.go){ st.stack.push(st.focus); st.focus=go.dataset.go; st.tab='explore'; render(); return; }
 });
-function flash(el){ var x=el.querySelector?el:el; el.textContent='✓'; setTimeout(function(){el.textContent='+'},700); }
+function flash(el){ el.textContent='✓'; setTimeout(function(){el.textContent='+'},700); }
 $('searchbtn').onclick=function(){
   var sw=$('searchwrap'), tw=$('titlewrap');
   if(sw.style.display==='none'){ sw.style.display='block'; tw.style.display='none'; $('searchin').focus(); }
