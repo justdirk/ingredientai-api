@@ -1,13 +1,15 @@
 """IngredientAI API — FastAPI entrypoint. Serves the interactive pairing-graph
-explorer at / plus the /v1 endpoints (Supabase-backed in production)."""
-from fastapi import FastAPI
+explorer at / (desktop) and the native mobile card UI to phones, plus the /v1
+endpoints (Supabase-backed in production)."""
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from settings import settings
 from routes import pairing
+from mobile import MOBILE_HTML
 
-app = FastAPI(title="IngredientAI API", version="0.4.1")
+app = FastAPI(title="IngredientAI API", version="0.5.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,11 +21,20 @@ app.include_router(pairing.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "environment": settings.environment, "version": "0.4.1"}
+    return {"status": "ok", "environment": settings.environment, "version": "0.5.0"}
+
+
+def _is_phone(ua: str) -> bool:
+    ua = ua.lower()
+    if "ipad" in ua:  # tablets get the desktop graph
+        return False
+    return any(s in ua for s in ("iphone", "android", "ipod", "blackberry", "windows phone", "mobile"))
 
 
 @app.get("/", response_class=HTMLResponse)
-def home():
+def home(request: Request, view: str = ""):
+    if view != "graph" and _is_phone(request.headers.get("user-agent", "")):
+        return MOBILE_HTML
     return INDEX_HTML
 
 
@@ -41,6 +52,7 @@ input{min-width:160px}
 .toggle{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .toggle button{border:0;background:#fff;padding:8px 12px;font-size:12.5px;cursor:pointer}.toggle button.on{background:var(--accent);color:#fff}
 button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 13px;font-size:13px;cursor:pointer}
+a.go{text-decoration:none;color:var(--ink)}
 .main{flex:1;display:flex;min-height:0}
 #graph{flex:1;min-width:0}
 .side{width:312px;border-left:1px solid var(--line);padding:14px;overflow:auto;background:#fff;-webkit-overflow-scrolling:touch}
@@ -58,13 +70,15 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
 .b-recipe{background:#1d9e75}.b-aroma{background:#9b6fc0}
 .legend{font-size:11px;color:var(--mut);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row{display:flex;gap:6px}.row input{min-width:0;flex:1}
+#tolist{display:none}
 @media (max-width:760px){
   header{padding:8px 10px;gap:6px}
   h1{font-size:15px;margin:0;order:1}
-  #lang{order:2;margin-left:auto}
-  #q{order:3;flex:1 1 100%;min-width:0}
-  #btnExplore{order:4}
-  .toggle{order:5;flex:1 1 auto}
+  #tolist{display:inline-block;order:2}
+  #lang{order:3;margin-left:auto}
+  #q{order:4;flex:1 1 100%;min-width:0}
+  #btnExplore{order:5}
+  .toggle{order:6;flex:1 1 auto}
   .toggle button{flex:1}
   .legend{display:none}
   .main{flex-direction:column}
@@ -78,6 +92,7 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
 </style></head><body>
 <header>
   <h1>IngredientAI</h1>
+  <a href="/" id=tolist class=go>← Cards</a>
   <input id=q placeholder="Start with an ingredient…" value="garlic" onkeydown="if(event.key==='Enter')start()">
   <button id=btnExplore class=go onclick=start()>Explore</button>
   <div class=toggle><button data-m=safe onclick="setMode('safe')">Safe</button><button data-m=balanced class=on onclick="setMode('balanced')">Balanced</button><button data-m=experimental onclick="setMode('experimental')">Experimental</button></div>
