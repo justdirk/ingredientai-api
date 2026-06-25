@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from settings import settings
 from routes import pairing
 
-app = FastAPI(title="IngredientAI API", version="0.3.1")
+app = FastAPI(title="IngredientAI API", version="0.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,7 +19,7 @@ app.include_router(pairing.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "environment": settings.environment, "version": "0.3.1"}
+    return {"status": "ok", "environment": settings.environment, "version": "0.4.0"}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -62,38 +62,82 @@ button.go{border:1px solid var(--line);background:#fff;border-radius:9px;padding
 <header>
   <h1>IngredientAI</h1>
   <input id=q placeholder="Start with an ingredient…" value="garlic" onkeydown="if(event.key==='Enter')start()">
-  <button class=go onclick=start()>Explore</button>
+  <button id=btnExplore class=go onclick=start()>Explore</button>
   <div class=toggle><button data-m=safe onclick="setMode('safe')">Safe</button><button data-m=balanced class=on onclick="setMode('balanced')">Balanced</button><button data-m=experimental onclick="setMode('experimental')">Experimental</button></div>
+  <select id=lang onchange="loadLang(this.value)"><option value=en>English</option><option value=pt>Português</option><option value=es>Español</option><option value=it>Italiano</option><option value=de>Deutsch</option><option value=fr>Français</option></select>
   <span class=legend><span class=badge style="background:#1d9e75">classic</span><span class=badge style="background:#4f9fd0">recommended</span><span class=badge style="background:#9a958b">interesting</span><span class=badge style="background:#d9883b">bold</span></span>
 </header>
 <div class=main>
   <div id=graph></div>
   <div class=side>
-    <div class=h>Focused</div>
-    <div id=focus class=muted>Click a node to expand it · double-click to add to recipe.</div>
-    <div class=h>Flavour trios</div>
-    <div id=trios class=muted>Affinities-in-threes appear here.</div>
-    <div class=h>Bridge two ingredients</div>
+    <div class=h id=focusH>Focused</div>
+    <div id=focus class=muted></div>
+    <div class=h id=triosH>Flavour trios</div>
+    <div id=trios class=muted></div>
+    <div class=h id=bridgeH>Bridge two ingredients</div>
     <div class=row><input id=ba placeholder="strawberry"><input id=bc placeholder="basil"></div>
-    <button class=go style="margin-top:6px" onclick=doBridge()>Find the bridge</button>
+    <button id=bridgeBtn class=go style="margin-top:6px" onclick=doBridge()>Find the bridge</button>
     <div id=bridgeout></div>
-    <div class=h>Your recipe</div>
-    <div id=basket class=chips><span class=muted>double-click nodes to add</span></div>
-    <div class=h>Make it a…</div>
-    <select id=rtype><option>salad</option><option>pasta sauce</option><option>main dish</option><option>marinade</option><option>dessert</option><option>cocktail</option><option>soup</option><option>dressing</option></select>
-    <button class=go style="margin-top:8px" onclick=build()>Build it</button>
+    <div class=h id=recipeH>Your recipe</div>
+    <div id=basket class=chips></div>
+    <div class=h id=makeitH>Make it a…</div>
+    <select id=rtype><option value=salad>salad</option><option value="pasta sauce">pasta sauce</option><option value="main dish">main dish</option><option value=marinade>marinade</option><option value=dessert>dessert</option><option value=cocktail>cocktail</option><option value=soup>soup</option><option value=dressing>dressing</option></select>
+    <button id=buildBtn class=go style="margin-top:8px" onclick=build()>Build it</button>
     <div id=recipe></div>
   </div>
 </div>
-<div class=hint>Pairings ranked by recipe co-occurrence + FlavorGraph2Vec + shared flavour notes. Tiers reflect affinity strength. Click any node to grow the web from it. Trios = affinities-in-threes; Bridge links ingredients that don't directly pair.</div>
+<div class=hint id=foot></div>
 <script>
 let mode='balanced', net, nodes, edges, expanded=new Set(), basket=[], booted=false;
-const CAT={Fruit:'#e07a5f',Spice:'#d9883b',Dairy:'#4f9fd0','Plant/Vegetable':'#3a9d5d','Vegetable':'#3a9d5d','Meat':'#c1554f','Meat/Animal Product':'#c1554f',Seafood:'#3a8fc4','Nut/Seed':'#b07a3c','Beverage Alcoholic':'#9b6fc0','Beverage':'#7a9bd0',Flower:'#d07aa8',Fungus:'#8a7d6b','Condiment':'#a89a6a','Bakery/Dessert':'#caa06a','Bakery/Dessert/Snack':'#caa06a'};
+let lang='en', NAMES={}, NOTES={};
+const I18N={
+ en:{ph_start:"Start with an ingredient…",explore:"Explore",m_safe:"Safe",m_balanced:"Balanced",m_experimental:"Experimental",t_classic:"classic",t_recommended:"recommended",t_interesting:"interesting",t_bold:"bold",focused:"Focused",focus_hint:"Click a node to expand it · double-click to add to recipe.",trios:"Flavour trios",trios_hint:"Affinities-in-threes appear here.",trios_finding:"finding trios…",trios_none:"No strong trios found.",trios_err:"Trios unavailable.",bridge_h:"Bridge two ingredients",bridge_btn:"Find the bridge",bridging:"Bridging…",bridge_enter:"Enter two ingredients.",bridge_none:"No bridge found between these two.",bridge_err:"Bridge unavailable.",recipe_h:"Your recipe",recipe_hint:"double-click nodes to add",makeit:"Make it a…",buildit:"Build it",thinking:"Thinking…",need2:"Add at least two ingredients.",build_fail:"Could not build.",flav_bridge:"flavour bridge",addrecipe:"+ recipe",protein:"protein",fat:"fat",nodirect:"%a and %c don't pair directly — try bridging through:",connectors:"Connectors between %a and %c:",foot:"Pairings ranked by recipe co-occurrence + flavour notes. Tiers reflect affinity strength. Click any node to grow the web. Trios = affinities-in-threes; Bridge links ingredients that don't directly pair."},
+ pt:{ph_start:"Comece com um ingrediente…",explore:"Explorar",m_safe:"Seguro",m_balanced:"Equilibrado",m_experimental:"Experimental",t_classic:"clássico",t_recommended:"recomendado",t_interesting:"interessante",t_bold:"ousado",focused:"Em foco",focus_hint:"Clique num nó para expandir · clique duplo para adicionar à receita.",trios:"Trios de sabor",trios_hint:"As afinidades em trio aparecem aqui.",trios_finding:"buscando trios…",trios_none:"Nenhum trio forte encontrado.",trios_err:"Trios indisponíveis.",bridge_h:"Conectar dois ingredientes",bridge_btn:"Encontrar a ponte",bridging:"Conectando…",bridge_enter:"Digite dois ingredientes.",bridge_none:"Nenhuma ponte encontrada entre os dois.",bridge_err:"Ponte indisponível.",recipe_h:"Sua receita",recipe_hint:"clique duplo nos nós para adicionar",makeit:"Transforme em…",buildit:"Criar",thinking:"Pensando…",need2:"Adicione pelo menos dois ingredientes.",build_fail:"Não foi possível criar.",flav_bridge:"ponte de sabor",addrecipe:"+ receita",protein:"proteína",fat:"gordura",nodirect:"%a e %c não combinam diretamente — tente conectar através de:",connectors:"Conectores entre %a e %c:",foot:"Combinações ordenadas por coocorrência em receitas + notas de sabor. Os níveis refletem a força da afinidade. Clique em qualquer nó para expandir. Trios = afinidades em três; a Ponte liga ingredientes que não combinam diretamente."},
+ es:{ph_start:"Empieza con un ingrediente…",explore:"Explorar",m_safe:"Seguro",m_balanced:"Equilibrado",m_experimental:"Experimental",t_classic:"clásico",t_recommended:"recomendado",t_interesting:"interesante",t_bold:"atrevido",focused:"Enfocado",focus_hint:"Haz clic en un nodo para expandir · doble clic para añadir a la receta.",trios:"Tríos de sabor",trios_hint:"Las afinidades en trío aparecen aquí.",trios_finding:"buscando tríos…",trios_none:"No se encontraron tríos fuertes.",trios_err:"Tríos no disponibles.",bridge_h:"Conectar dos ingredientes",bridge_btn:"Encontrar el puente",bridging:"Conectando…",bridge_enter:"Introduce dos ingredientes.",bridge_none:"No se encontró puente entre estos dos.",bridge_err:"Puente no disponible.",recipe_h:"Tu receta",recipe_hint:"doble clic en los nodos para añadir",makeit:"Conviértelo en…",buildit:"Crear",thinking:"Pensando…",need2:"Añade al menos dos ingredientes.",build_fail:"No se pudo crear.",flav_bridge:"puente de sabor",addrecipe:"+ receta",protein:"proteína",fat:"grasa",nodirect:"%a y %c no combinan directamente — prueba a conectar mediante:",connectors:"Conectores entre %a y %c:",foot:"Maridajes ordenados por coaparición en recetas + notas de sabor. Los niveles reflejan la fuerza de la afinidad. Haz clic en cualquier nodo para expandir. Tríos = afinidades de tres; el Puente une ingredientes que no combinan directamente."},
+ it:{ph_start:"Inizia con un ingrediente…",explore:"Esplora",m_safe:"Sicuro",m_balanced:"Bilanciato",m_experimental:"Sperimentale",t_classic:"classico",t_recommended:"consigliato",t_interesting:"interessante",t_bold:"audace",focused:"In evidenza",focus_hint:"Clicca un nodo per espandere · doppio clic per aggiungere alla ricetta.",trios:"Trii di sapore",trios_hint:"Le affinità a tre appaiono qui.",trios_finding:"ricerca trii…",trios_none:"Nessun trio forte trovato.",trios_err:"Trii non disponibili.",bridge_h:"Collega due ingredienti",bridge_btn:"Trova il ponte",bridging:"Collegamento…",bridge_enter:"Inserisci due ingredienti.",bridge_none:"Nessun ponte trovato tra i due.",bridge_err:"Ponte non disponibile.",recipe_h:"La tua ricetta",recipe_hint:"doppio clic sui nodi per aggiungere",makeit:"Trasformalo in…",buildit:"Crea",thinking:"Sto pensando…",need2:"Aggiungi almeno due ingredienti.",build_fail:"Impossibile creare.",flav_bridge:"ponte di sapore",addrecipe:"+ ricetta",protein:"proteine",fat:"grassi",nodirect:"%a e %c non si abbinano direttamente — prova a collegarli tramite:",connectors:"Connettori tra %a e %c:",foot:"Abbinamenti ordinati per co-occorrenza nelle ricette + note aromatiche. I livelli riflettono la forza dell'affinità. Clicca un nodo per espandere. Trii = affinità a tre; il Ponte collega ingredienti che non si abbinano direttamente."},
+ de:{ph_start:"Mit einer Zutat beginnen…",explore:"Entdecken",m_safe:"Sicher",m_balanced:"Ausgewogen",m_experimental:"Experimentell",t_classic:"klassisch",t_recommended:"empfohlen",t_interesting:"interessant",t_bold:"gewagt",focused:"Fokus",focus_hint:"Knoten anklicken zum Erweitern · Doppelklick zum Hinzufügen zum Rezept.",trios:"Geschmackstrios",trios_hint:"Dreier-Affinitäten erscheinen hier.",trios_finding:"suche Trios…",trios_none:"Keine starken Trios gefunden.",trios_err:"Trios nicht verfügbar.",bridge_h:"Zwei Zutaten verbinden",bridge_btn:"Brücke finden",bridging:"Verbinde…",bridge_enter:"Zwei Zutaten eingeben.",bridge_none:"Keine Brücke zwischen beiden gefunden.",bridge_err:"Brücke nicht verfügbar.",recipe_h:"Dein Rezept",recipe_hint:"Doppelklick auf Knoten zum Hinzufügen",makeit:"Mach daraus…",buildit:"Erstellen",thinking:"Denke nach…",need2:"Mindestens zwei Zutaten hinzufügen.",build_fail:"Erstellen fehlgeschlagen.",flav_bridge:"Geschmacksbrücke",addrecipe:"+ Rezept",protein:"Eiweiß",fat:"Fett",nodirect:"%a und %c passen nicht direkt zusammen — versuche eine Brücke über:",connectors:"Verbindungen zwischen %a und %c:",foot:"Kombinationen nach Rezept-Kookkurrenz + Aromanoten sortiert. Stufen zeigen die Stärke der Affinität. Klicke einen Knoten zum Erweitern. Trios = Dreier-Affinitäten; die Brücke verbindet Zutaten, die nicht direkt zusammenpassen."},
+ fr:{ph_start:"Commencez par un ingrédient…",explore:"Explorer",m_safe:"Sûr",m_balanced:"Équilibré",m_experimental:"Expérimental",t_classic:"classique",t_recommended:"recommandé",t_interesting:"intéressant",t_bold:"audacieux",focused:"Sélection",focus_hint:"Cliquez sur un nœud pour développer · double-clic pour ajouter à la recette.",trios:"Trios de saveurs",trios_hint:"Les affinités à trois apparaissent ici.",trios_finding:"recherche de trios…",trios_none:"Aucun trio fort trouvé.",trios_err:"Trios indisponibles.",bridge_h:"Relier deux ingrédients",bridge_btn:"Trouver le pont",bridging:"Liaison…",bridge_enter:"Saisissez deux ingrédients.",bridge_none:"Aucun pont trouvé entre les deux.",bridge_err:"Pont indisponible.",recipe_h:"Votre recette",recipe_hint:"double-cliquez sur les nœuds pour ajouter",makeit:"Transformer en…",buildit:"Créer",thinking:"Réflexion…",need2:"Ajoutez au moins deux ingrédients.",build_fail:"Création impossible.",flav_bridge:"pont de saveurs",addrecipe:"+ recette",protein:"protéines",fat:"lipides",nodirect:"%a et %c ne s'accordent pas directement — essayez un pont via :",connectors:"Connecteurs entre %a et %c :",foot:"Accords classés par co-occurrence dans les recettes + notes aromatiques. Les niveaux reflètent la force de l'affinité. Cliquez sur un nœud pour développer. Trios = affinités à trois ; le Pont relie des ingrédients qui ne s'accordent pas directement."}
+};
+const RT={en:["salad","pasta sauce","main dish","marinade","dessert","cocktail","soup","dressing"],
+ pt:["salada","molho de massa","prato principal","marinada","sobremesa","coquetel","sopa","molho"],
+ es:["ensalada","salsa para pasta","plato principal","adobo","postre","cóctel","sopa","aliño"],
+ it:["insalata","sugo per pasta","piatto principale","marinata","dessert","cocktail","zuppa","condimento"],
+ de:["Salat","Pastasauce","Hauptgericht","Marinade","Dessert","Cocktail","Suppe","Dressing"],
+ fr:["salade","sauce pour pâtes","plat principal","marinade","dessert","cocktail","soupe","vinaigrette"]};
 const TIER={classic:'#1d9e75',recommended:'#4f9fd0',interesting:'#9a958b',bold:'#d9883b'};
 const TW={classic:3,recommended:2.1,interesting:1.3,bold:1.7};
-const disp=s=>s.replace(/_/g,' ').replace(/\\b\\w/g,c=>c.toUpperCase());
+function t(k){ return (I18N[lang]&&I18N[lang][k])||I18N.en[k]||k; }
+const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
+function disp(key){ if(lang!=='en'&&NAMES[key]) return cap(NAMES[key]); return key.replace(/_/g,' ').replace(/\\b\\w/g,c=>c.toUpperCase()); }
+function dnote(n){ return (lang!=='en'&&NOTES[n])?NOTES[n]:n; }
+const CAT={Fruit:'#e07a5f',Spice:'#d9883b',Dairy:'#4f9fd0','Plant/Vegetable':'#3a9d5d','Vegetable':'#3a9d5d','Meat':'#c1554f','Meat/Animal Product':'#c1554f',Seafood:'#3a8fc4','Nut/Seed':'#b07a3c','Beverage Alcoholic':'#9b6fc0','Beverage':'#7a9bd0',Flower:'#d07aa8',Fungus:'#8a7d6b','Condiment':'#a89a6a','Bakery/Dessert':'#caa06a','Bakery/Dessert/Snack':'#caa06a'};
 function color(cat){return CAT[cat]||'#8a9a8e'}
 function setMode(m){mode=m;document.querySelectorAll('.toggle button').forEach(b=>b.className=b.dataset.m===m?'on':'');}
+function applyStatic(){
+  document.getElementById('q').placeholder=t('ph_start');
+  document.getElementById('btnExplore').textContent=t('explore');
+  document.querySelector('[data-m=safe]').textContent=t('m_safe');
+  document.querySelector('[data-m=balanced]').textContent=t('m_balanced');
+  document.querySelector('[data-m=experimental]').textContent=t('m_experimental');
+  const lg=document.querySelectorAll('.legend .badge');
+  lg[0].textContent=t('t_classic');lg[1].textContent=t('t_recommended');lg[2].textContent=t('t_interesting');lg[3].textContent=t('t_bold');
+  document.getElementById('focusH').textContent=t('focused');
+  document.getElementById('triosH').textContent=t('trios');
+  document.getElementById('bridgeH').textContent=t('bridge_h');
+  document.getElementById('bridgeBtn').textContent=t('bridge_btn');
+  document.getElementById('recipeH').textContent=t('recipe_h');
+  document.getElementById('makeitH').textContent=t('makeit');
+  document.getElementById('buildBtn').textContent=t('buildit');
+  document.getElementById('foot').textContent=t('foot');
+  const rt=RT[lang]||RT.en, sel=document.getElementById('rtype');
+  [].forEach.call(sel.options,(o,i)=>{ o.textContent=rt[i]; });
+}
+async function loadLang(l){
+  lang=l; document.getElementById('lang').value=l;
+  if(l==='en'){ NAMES={}; NOTES={}; }
+  else{ try{ const d=await (await fetch(`/v1/i18n/${l}`)).json(); NAMES=d.names||{}; NOTES=d.notes||{}; }catch(e){ NAMES={};NOTES={}; } }
+  applyStatic(); start();
+}
 function ensure(){
   if(net)return;
   nodes=new vis.DataSet([]); edges=new vis.DataSet([]);
@@ -118,71 +162,76 @@ async function expand(key){
   let d; try{ d=await (await fetch(`/v1/pair/${encodeURIComponent(key)}?mode=${mode}&limit=8`)).json(); }catch(e){ return; }
   if(!d.pairings||!d.pairings.length) return;
   const pp=pos(key), n=d.pairings.length, R=175, base=(key.length%6);
-  let added=0;
   d.pairings.forEach((p,i)=>{
     const a=base+(i/n)*2*Math.PI;
-    if(addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*24-12), pp.y+R*Math.sin(a)+(Math.random()*24-12))) added++;
+    addNodeAt(p.ingredient,p.category, pp.x+R*Math.cos(a)+(Math.random()*24-12), pp.y+R*Math.sin(a)+(Math.random()*24-12));
     const eid=key+'|'+p.ingredient;
-    const notes=(p.explanation.shared_notes||[]); const tier=p.tier||'';
+    const notes=(p.explanation.shared_notes||[]).map(dnote); const tier=p.tier||'';
     if(!edges.get(eid)&&!edges.get(p.ingredient+'|'+key))
       edges.add({id:eid,from:key,to:p.ingredient,label:notes[0]||'',
-        title:(tier?tier.toUpperCase()+' · ':'')+(notes.join(', ')||'similar profile'),
+        title:(tier?t('t_'+tier).toUpperCase()+' · ':'')+(notes.join(', ')||''),
         width:TW[tier]||1.5, color:{color:(TIER[tier]||'#d8d3c8'),highlight:TIER[tier]||'#1d9e75'}});
   });
-  // Only frame the very first expansion. Afterwards the web grows in place so a
-  // click connects new pairings to the node you clicked without moving your view.
   if(!booted){ booted=true; try{ net.fit({animation:{duration:450}}); }catch(e){} }
 }
 async function showFocus(key){
   const el=document.getElementById('focus');
-  el.innerHTML=`<b style="font-size:15px">${disp(key)}</b> <button class=go style="padding:3px 8px;font-size:11px" onclick="addBasket('${key}')">+ recipe</button>`;
+  el.innerHTML=`<b style="font-size:15px">${disp(key)}</b> <button class=go style="padding:3px 8px;font-size:11px" onclick="addBasket('${key}')">${t('addrecipe')}</button>`;
   try{ const d=await (await fetch(`/v1/ingredient/${encodeURIComponent(key)}`)).json();
-    const n=d.nutrition&&d.nutrition.per_100g; if(n) el.innerHTML+=`<div class=muted style="margin-top:5px">${n.kcal} kcal · ${n.protein_g}g protein · ${n.fat_g}g fat</div>`;
+    const n=d.nutrition&&d.nutrition.per_100g; if(n) el.innerHTML+=`<div class=muted style="margin-top:5px">${n.kcal} kcal · ${n.protein_g}g ${t('protein')} · ${n.fat_g}g ${t('fat')}</div>`;
   }catch(e){}
-  document.getElementById('ba').value=key.replace(/_/g,' ');
+  document.getElementById('ba').value=disp(key);
   loadTrios(key);
 }
 async function loadTrios(key){
-  const t=document.getElementById('trios'); t.innerHTML='<span class=muted>finding trios…</span>';
+  const tt=document.getElementById('trios'); tt.innerHTML=`<span class=muted>${t('trios_finding')}</span>`;
   try{
     const d=await (await fetch(`/v1/trio/${encodeURIComponent(key)}?limit=6`)).json();
-    if(!d.trios||!d.trios.length){ t.innerHTML='<span class=muted>No strong trios found.</span>'; return; }
-    t.innerHTML=d.trios.map(x=>`<span class=tchip onclick="addBasket('${key}');addBasket('${x.a}');addBasket('${x.b}')">${disp(key)} + <b>${disp(x.a)}</b> + <b>${disp(x.b)}</b></span>`).join('');
-  }catch(e){ t.innerHTML='<span class=muted>Trios unavailable.</span>'; }
+    if(!d.trios||!d.trios.length){ tt.innerHTML=`<span class=muted>${t('trios_none')}</span>`; return; }
+    tt.innerHTML=d.trios.map(x=>`<span class=tchip onclick="addBasket('${key}');addBasket('${x.a}');addBasket('${x.b}')">${disp(key)} + <b>${disp(x.a)}</b> + <b>${disp(x.b)}</b></span>`).join('');
+  }catch(e){ tt.innerHTML=`<span class=muted>${t('trios_err')}</span>`; }
 }
 async function doBridge(){
   const a=document.getElementById('ba').value.trim().toLowerCase().replace(/ /g,'_');
   const c=document.getElementById('bc').value.trim().toLowerCase().replace(/ /g,'_');
   const out=document.getElementById('bridgeout');
-  if(!a||!c){ out.innerHTML='<div class=muted style="margin-top:6px">Enter two ingredients.</div>'; return; }
-  out.innerHTML='<div class=muted style="margin-top:6px">Bridging…</div>';
+  if(!a||!c){ out.innerHTML=`<div class=muted style="margin-top:6px">${t('bridge_enter')}</div>`; return; }
+  out.innerHTML=`<div class=muted style="margin-top:6px">${t('bridging')}</div>`;
   try{
     const d=await (await fetch(`/v1/bridge?a=${encodeURIComponent(a)}&c=${encodeURIComponent(c)}&limit=6`)).json();
-    if(!d.bridges||!d.bridges.length){ out.innerHTML='<div class=muted style="margin-top:6px">No bridge found between these two.</div>'; return; }
+    if(!d.bridges||!d.bridges.length){ out.innerHTML=`<div class=muted style="margin-top:6px">${t('bridge_none')}</div>`; return; }
     const direct=d.bridges[0].direct_link;
-    const head=(direct!=null&&direct<=0)?`<div class=muted style="margin-top:6px">${disp(a)} and ${disp(c)} don't pair directly — try bridging through:</div>`:`<div class=muted style="margin-top:6px">Connectors between ${disp(a)} and ${disp(c)}:</div>`;
+    const tmpl=(direct!=null&&direct<=0)?t('nodirect'):t('connectors');
+    const head=`<div class=muted style="margin-top:6px">${tmpl.replace('%a',disp(a)).replace('%c',disp(c))}</div>`;
     out.innerHTML=head+'<div style="margin-top:6px">'+d.bridges.map(b=>`<span class=tchip onclick="addBasket('${a}');addBasket('${b.bridge}');addBasket('${c}')"><b>${disp(b.bridge)}</b> <span class="badge b-${b.via}">${b.via}</span></span>`).join('')+'</div>';
-  }catch(e){ out.innerHTML='<div class=muted style="margin-top:6px">Bridge unavailable.</div>'; }
+  }catch(e){ out.innerHTML=`<div class=muted style="margin-top:6px">${t('bridge_err')}</div>`; }
 }
 function addBasket(key){ if(!basket.includes(key)){basket.push(key);renderBasket();} }
 function renderBasket(){
   const b=document.getElementById('basket');
-  b.innerHTML=basket.length?basket.map(k=>`<span class="chip add" onclick="rmBasket('${k}')">${disp(k)} ✕</span>`).join(''):'<span class=muted>double-click nodes to add</span>';
+  b.innerHTML=basket.length?basket.map(k=>`<span class="chip add" onclick="rmBasket('${k}')">${disp(k)} ✕</span>`).join(''):`<span class=muted>${t('recipe_hint')}</span>`;
 }
 function rmBasket(k){basket=basket.filter(x=>x!==k);renderBasket();}
 async function build(){
   const out=document.getElementById('recipe');
-  if(basket.length<2){out.innerHTML='<div class=muted style="margin-top:8px">Add at least two ingredients.</div>';return;}
-  out.innerHTML='<div class=muted style="margin-top:8px">Thinking…</div>';
+  if(basket.length<2){out.innerHTML=`<div class=muted style="margin-top:8px">${t('need2')}</div>`;return;}
+  out.innerHTML=`<div class=muted style="margin-top:8px">${t('thinking')}</div>`;
   const type=document.getElementById('rtype').value;
   try{
     const r=await (await fetch('/v1/recipe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ingredients:basket,type})})).json();
-    out.innerHTML=`<div class=rip><b>${r.suggestion}</b>${r.shared_theme&&r.shared_theme.length?`<div class=muted style="margin-top:6px">flavour bridge: ${r.shared_theme.slice(0,6).join(', ')}</div>`:''}</div>`;
-  }catch(e){ out.innerHTML='<div class=muted>Could not build.</div>'; }
+    const theme=(r.shared_theme||[]).map(dnote).slice(0,6);
+    out.innerHTML=`<div class=rip><b>${r.suggestion}</b>${theme.length?`<div class=muted style="margin-top:6px">${t('flav_bridge')}: ${theme.join(', ')}</div>`:''}</div>`;
+  }catch(e){ out.innerHTML=`<div class=muted>${t('build_fail')}</div>`; }
 }
-function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear(); booted=false;
-  const k=document.getElementById('q').value.trim().toLowerCase().replace(/ /g,'_');
+function start(){ ensure(); nodes.clear(); edges.clear(); expanded.clear(); booted=false; renderBasket();
+  const raw=document.getElementById('q').value.trim().toLowerCase();
+  const k=raw.replace(/ /g,'_');
   addNodeAt(k,null,0,0); net.moveTo({position:{x:0,y:0},scale:0.9}); showFocus(k); expand(k);
 }
-window.addEventListener('load',start);
+function init(){
+  const nav=(navigator.language||'en').slice(0,2).toLowerCase();
+  const start_lang=['pt','es','it','de','fr'].includes(nav)?nav:'en';
+  loadLang(start_lang);
+}
+window.addEventListener('load',init);
 </script></body></html>"""
