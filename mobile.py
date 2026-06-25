@@ -115,7 +115,8 @@ function doSearch(q){
   box.innerHTML=out.map(function(k){return '<div class=sug data-pick="'+k+'">'+disp(k)+'</div>'}).join('');
   box.style.display='block';
 }
-function addSel(k){ if(!inSel(k)){ st.selection.push(k); } st.focus=k; $('searchin').value=''; $('suggest').style.display='none'; render(); }
+function addSel(k){ if(!inSel(k)){ st.selection.push(k); } selbar(); }
+function pickSel(k){ if(!inSel(k)){ st.selection.push(k); } st.focus=k; st.tab='explore'; $('searchin').value=''; $('suggest').style.display='none'; render(); }
 function removeSel(k){ st.selection=st.selection.filter(function(x){return x!==k}); if(st.focus===k) st.focus=st.selection[st.selection.length-1]||null; render(); }
 function selbar(){
   var el=$('selbar');
@@ -204,15 +205,15 @@ async function buildRecipe(){
   }catch(e){ out.innerHTML='<div class=sub>'+t('buildfail')+'</div>'; }
 }
 $('searchin').addEventListener('input',function(){ doSearch(this.value); });
-$('searchin').addEventListener('keydown',function(e){ if(e.key==='Enter'){ var k=canon(this.value); if(k){ addSel(k); } } });
+$('searchin').addEventListener('keydown',function(e){ if(e.key==='Enter'){ var k=canon(this.value); if(k){ pickSel(k); } } });
 document.body.addEventListener('click',function(e){
   var pick=e.target.closest('[data-pick]'), add=e.target.closest('[data-add]'), trio=e.target.closest('[data-trio]'),
       go=e.target.closest('[data-go]'), rm=e.target.closest('[data-rm]'), foc=e.target.closest('[data-foc]'),
       tab=e.target.closest('[data-t]'), mode=e.target.closest('[data-m]');
-  if(pick){ addSel(pick.dataset.pick); return; }
+  if(pick){ pickSel(pick.dataset.pick); return; }
   if(rm){ e.stopPropagation(); removeSel(rm.dataset.rm); return; }
-  if(add){ e.stopPropagation(); addSel(add.dataset.add); return; }
-  if(trio){ e.stopPropagation(); var p=trio.dataset.trio.split('|'); addSel(p[0]); addSel(p[1]); return; }
+  if(add){ e.stopPropagation(); addSel(add.dataset.add); add.className='addb on'; add.textContent='✓'; return; }
+  if(trio){ e.stopPropagation(); var p=trio.dataset.trio.split('|'); addSel(p[0]); addSel(p[1]); trio.textContent='✓'; setTimeout(function(){trio.textContent='+'},800); return; }
   if(foc){ st.focus=foc.dataset.foc; st.tab='explore'; render(); return; }
   if(tab){ st.tab=tab.dataset.t; render(); return; }
   if(mode){ st.mode=mode.dataset.m; render(); return; }
