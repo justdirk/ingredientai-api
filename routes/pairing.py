@@ -32,6 +32,18 @@ def recipe(req: RecipeReq):
     return {"type": req.type, "ingredients": req.ingredients, "shared_theme": theme, "suggestion": sugg + "."}
 
 
+@router.get("/names")
+def names():
+    """All searchable food ingredient names (ranked by usage) for client-side search."""
+    from engines import supabase_index
+    if not supabase_index.available():
+        return []
+    try:
+        return supabase_index._rpc("food_names", {})
+    except Exception:
+        return []
+
+
 @router.get("/pair/{ingredient}")
 def pair(
     ingredient: str,
