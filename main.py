@@ -1,6 +1,6 @@
 """IngredientAI API — FastAPI entrypoint. Serves the interactive pairing-graph
 explorer at / (desktop) and the native mobile card UI to phones, plus the /v1
-endpoints (Supabase-backed in production)."""
+endpoints (Supabase-backed in production). Override with ?view=graph|mobile."""
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -33,7 +33,9 @@ def _is_phone(ua: str) -> bool:
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, view: str = ""):
-    if view != "graph" and _is_phone(request.headers.get("user-agent", "")):
+    if view == "graph":
+        return INDEX_HTML
+    if view == "mobile" or _is_phone(request.headers.get("user-agent", "")):
         return MOBILE_HTML
     return INDEX_HTML
 
